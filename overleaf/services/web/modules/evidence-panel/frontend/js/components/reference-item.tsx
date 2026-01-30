@@ -14,15 +14,18 @@ interface ReferenceItemProps {
   reference: ReferenceInfo
   onIndex: (documentId: string) => void
   onRemove: (documentId: string) => void
+  onReindex?: (documentId: string) => void
   disabled?: boolean
 }
 
-export const ReferenceItem: React.FC<ReferenceItemProps> = ({
-  reference,
-  onIndex,
-  onRemove,
-  disabled = false,
-}) => {
+export const ReferenceItem: React.FC<ReferenceItemProps> = React.memo(
+  function ReferenceItem({
+    reference,
+    onIndex,
+    onRemove,
+    onReindex,
+    disabled = false,
+  }) {
   const getStatusIcon = () => {
     switch (reference.status) {
       case 'indexed':
@@ -78,14 +81,26 @@ export const ReferenceItem: React.FC<ReferenceItemProps> = ({
           </button>
         )}
         {reference.status === 'indexed' && (
-          <button
-            className="btn btn-sm btn-danger-ghost"
-            onClick={() => onRemove(reference.documentId)}
-            disabled={disabled}
-            title="Remove from index"
-          >
-            Remove
-          </button>
+          <>
+            {onReindex && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => onReindex(reference.documentId)}
+                disabled={disabled}
+                title="Re-parse and re-index this document"
+              >
+                <MaterialIcon type="refresh" />
+              </button>
+            )}
+            <button
+              className="btn btn-sm btn-danger-ghost"
+              onClick={() => onRemove(reference.documentId)}
+              disabled={disabled}
+              title="Remove from index"
+            >
+              Remove
+            </button>
+          </>
         )}
         {reference.status === 'error' && (
           <button
@@ -100,6 +115,7 @@ export const ReferenceItem: React.FC<ReferenceItemProps> = ({
       </div>
     </div>
   )
-}
+  }
+)
 
 export default ReferenceItem

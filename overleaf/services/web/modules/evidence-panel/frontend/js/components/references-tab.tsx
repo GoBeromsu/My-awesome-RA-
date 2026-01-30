@@ -36,7 +36,7 @@ const isValidPdf = (file: File): boolean => {
   return validExtension && validMimeType
 }
 
-export const ReferencesTab: React.FC = () => {
+export const ReferencesTab: React.FC = React.memo(function ReferencesTab() {
   const [references, setReferences] = useState<ReferenceInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -271,6 +271,46 @@ export const ReferencesTab: React.FC = () => {
     handleUploadClick()
   }, [handleUploadClick])
 
+  const handleReindex = useCallback(async (documentId: string) => {
+    setProcessingIds(prev => new Set(prev).add(documentId))
+
+    // Update status to indexing
+    setReferences(prev =>
+      prev.map(ref =>
+        ref.documentId === documentId
+          ? { ...ref, status: 'indexing' as const }
+          : ref
+      )
+    )
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents/${documentId}/reindex`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        throw new Error('Reindex failed')
+      }
+
+      // Start polling for status
+      const timer = setTimeout(() => pollDocumentStatus(documentId), POLL_INTERVAL)
+      pollTimersRef.current.set(documentId, timer)
+    } catch (err) {
+      setReferences(prev =>
+        prev.map(ref =>
+          ref.documentId === documentId
+            ? { ...ref, status: 'error' as const, error: 'Reindex failed' }
+            : ref
+        )
+      )
+      setProcessingIds(prev => {
+        const next = new Set(prev)
+        next.delete(documentId)
+        return next
+      })
+    }
+  }, [pollDocumentStatus])
+
   const handleRemove = useCallback(async (documentId: string) => {
     setProcessingIds(prev => new Set(prev).add(documentId))
 
@@ -380,6 +420,7 @@ export const ReferencesTab: React.FC = () => {
               reference={ref}
               onIndex={handleIndex}
               onRemove={handleRemove}
+              onReindex={handleReindex}
               disabled={processingIds.has(ref.documentId)}
             />
           ))}
@@ -387,6 +428,6 @@ export const ReferencesTab: React.FC = () => {
       )}
     </div>
   )
-}
+})
 
 export default ReferencesTab
