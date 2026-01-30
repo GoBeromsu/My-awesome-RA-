@@ -1,0 +1,23 @@
+{
+  "name": "@my-awesome-ra/evidence-types",
+  "version": "0.1.0",
+  "description": "Shared TypeScript types for Evidence Panel",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/my-awesome-ra.git"
+  },
+  "license": "MIT"
+}
