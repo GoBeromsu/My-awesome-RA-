@@ -10,10 +10,20 @@ import PdfHybridCodeCheckButton from './pdf-hybrid-code-check-button'
 import PdfOrphanRefreshButton from './pdf-orphan-refresh-button'
 import { DetachedSynctexControl } from './detach-synctex-control'
 import LoadingSpinner from '@/shared/components/loading-spinner'
+import MaterialIcon from '@/shared/components/material-icon'
+import OLTooltip from '@/shared/components/ol/ol-tooltip'
 
 const ORPHAN_UI_TIMEOUT_MS = 5000
 
-function PdfPreviewHybridToolbar() {
+interface PdfPreviewHybridToolbarProps {
+  showEvidence?: boolean
+  onToggleEvidence?: () => void
+}
+
+function PdfPreviewHybridToolbar({
+  showEvidence = false,
+  onToggleEvidence,
+}: PdfPreviewHybridToolbarProps) {
   const { detachRole, detachIsLinked } = useLayoutContext()
   const { t } = useTranslation()
   const uiTimeoutRef = useRef<number>()
@@ -43,7 +53,12 @@ function PdfPreviewHybridToolbar() {
     ToolbarInner = <PdfPreviewHybridToolbarConnectingInner />
   } else {
     // tab is not detached or not orphan
-    ToolbarInner = <PdfPreviewHybridToolbarInner />
+    ToolbarInner = (
+      <PdfPreviewHybridToolbarInner
+        showEvidence={showEvidence}
+        onToggleEvidence={onToggleEvidence}
+      />
+    )
   }
 
   return (
@@ -56,13 +71,39 @@ function PdfPreviewHybridToolbar() {
   )
 }
 
-function PdfPreviewHybridToolbarInner() {
+interface PdfPreviewHybridToolbarInnerProps {
+  showEvidence?: boolean
+  onToggleEvidence?: () => void
+}
+
+function PdfPreviewHybridToolbarInner({
+  showEvidence = false,
+  onToggleEvidence,
+}: PdfPreviewHybridToolbarInnerProps) {
+  const { t } = useTranslation()
+
   return (
     <>
       <div className="toolbar-pdf-left">
         <PdfCompileButton />
         <PdfHybridLogsButton />
         <PdfHybridDownloadButton />
+        {onToggleEvidence && (
+          <OLTooltip
+            id="toggle-evidence-tooltip"
+            description={showEvidence ? t('show_pdf') : t('show_evidence')}
+            overlayProps={{ placement: 'bottom' }}
+          >
+            <button
+              className={`toolbar-evidence-toggle ${showEvidence ? 'active' : ''}`}
+              onClick={onToggleEvidence}
+              aria-pressed={showEvidence}
+              aria-label={showEvidence ? t('show_pdf') : t('show_evidence')}
+            >
+              {showEvidence ? 'PDF' : 'Cite'}
+            </button>
+          </OLTooltip>
+        )}
       </div>
       <div className="toolbar-pdf-right">
         <div className="toolbar-pdf-controls" id="toolbar-pdf-controls" />

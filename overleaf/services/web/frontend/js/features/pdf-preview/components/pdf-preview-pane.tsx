@@ -1,4 +1,4 @@
-import { ElementType, memo, Suspense } from 'react'
+import { ElementType, memo, Suspense, useState, useEffect, useCallback, lazy } from 'react'
 import classNames from 'classnames'
 import PdfLogsViewer from './pdf-logs-viewer'
 import PdfViewer from './pdf-viewer'
@@ -14,6 +14,14 @@ import importOverleafModules from '../../../../macros/import-overleaf-module.mac
 import PdfCodeCheckFailedBanner from '@/features/ide-redesign/components/pdf-preview/pdf-code-check-failed-banner'
 import getMeta from '@/utils/meta'
 import NewPdfLogsViewer from '@/features/ide-redesign/components/pdf-preview/pdf-logs-viewer'
+import { EVIDENCE_SHOW_EVENT } from '@modules/evidence-panel/frontend/js/constants/events'
+
+// Lazy load EvidenceViewer for code splitting
+const EvidenceViewer = lazy(() =>
+  import('@modules/evidence-panel/frontend/js/components/evidence-viewer').then(
+    module => ({ default: module.EvidenceViewer })
+  )
+)
 
 function PdfPreviewPane() {
   const {
@@ -30,6 +38,25 @@ function PdfPreviewPane() {
     activeOverallTheme === 'dark' &&
     darkModeSetting
 
+  // Evidence view toggle state
+  const [showEvidence, setShowEvidence] = useState(false)
+
+  // Auto-switch to Evidence view when paragraph is selected
+  useEffect(() => {
+    const handleShowEvidence = () => {
+      setShowEvidence(true)
+    }
+    window.addEventListener(EVIDENCE_SHOW_EVENT, handleShowEvidence)
+    return () => {
+      window.removeEventListener(EVIDENCE_SHOW_EVENT, handleShowEvidence)
+    }
+  }, [])
+
+  // Manual toggle callback for toolbar button
+  const toggleEvidence = useCallback(() => {
+    setShowEvidence(prev => !prev)
+  }, [])
+
   const classes = classNames('pdf', 'full-size', {
     'pdf-empty': !pdfUrl,
     'pdf-dark-mode': darkModePdf,
@@ -45,20 +72,38 @@ function PdfPreviewPane() {
     <div className={classes}>
       <PdfPreviewProvider>
         {newEditor ? (
-          <PdfPreviewHybridToolbarNew />
+          <PdfPreviewHybridToolbarNew
+            showEvidence={showEvidence}
+            onToggleEvidence={toggleEvidence}
+          />
         ) : (
-          <PdfHybridPreviewToolbar />
+          <PdfHybridPreviewToolbar
+            showEvidence={showEvidence}
+            onToggleEvidence={toggleEvidence}
+          />
         )}
         {newEditor && <PdfCodeCheckFailedBanner />}
         <PdfPreviewMessages>
           {compileTimeout < 60 && <CompileTimeWarningUpgradePrompt />}
         </PdfPreviewMessages>
-        <Suspense fallback={<FullSizeLoadingSpinner delay={500} />}>
-          <div className="pdf-viewer" data-testid="pdf-viewer">
-            <PdfViewer />
-          </div>
-        </Suspense>
-        {newEditor ? <NewPdfLogsViewer /> : <PdfLogsViewer />}
+
+        {showEvidence ? (
+          <Suspense fallback={<FullSizeLoadingSpinner delay={500} />}>
+            <div className="evidence-viewer-container" data-testid="evidence-viewer">
+              <EvidenceViewer />
+            </div>
+          </Suspense>
+        ) : (
+          <>
+            <Suspense fallback={<FullSizeLoadingSpinner delay={500} />}>
+              <div className="pdf-viewer" data-testid="pdf-viewer">
+                <PdfViewer />
+              </div>
+            </Suspense>
+            {newEditor ? <NewPdfLogsViewer /> : <PdfLogsViewer />}
+          </>
+        )}
+
         {pdfPromotions.map(({ import: { default: Component }, path }) => (
           <Component key={path} />
         ))}
