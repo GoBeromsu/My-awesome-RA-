@@ -255,6 +255,47 @@
   gap: 8px;
 }
 
+// Evidence Item Header (clickable)
+.evidence-item-header {
+  cursor: pointer;
+}
+
+// Evidence Snippet (blockquote)
+.evidence-snippet {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--green-50);
+  background: var(--bg-light-secondary);
+  border-radius: 0 4px 4px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+// Evidence Meta (page, source)
+.evidence-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--content-secondary);
+}
+
+.evidence-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  .material-symbols {
+    font-size: 14px;
+  }
+}
+
+// Evidence Actions
+.evidence-actions {
+  justify-content: flex-start;
+  padding-top: 12px;
+}
+
 // Evidence Item
 .evidence-item {
   background: var(--bg-light-primary);
@@ -716,5 +757,314 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+// ===== Evidence Viewer (PDF Panel replacement) =====
+
+.evidence-viewer-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.evidence-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-light-secondary);
+  overflow: hidden;
+}
+
+.evidence-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-light-primary);
+}
+
+.evidence-viewer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--content-primary);
+
+  .material-symbols {
+    font-size: 20px;
+    color: var(--green-50);
+  }
+
+  .evidence-count {
+    font-weight: normal;
+    color: var(--content-secondary);
+    font-size: 12px;
+  }
+}
+
+.evidence-viewer-query {
+  padding: 8px 16px;
+  background: var(--bg-light-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+
+  .query-label {
+    color: var(--content-secondary);
+    flex-shrink: 0;
+  }
+
+  .query-text {
+    color: var(--content-primary);
+    font-style: italic;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.evidence-viewer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.evidence-viewer-empty,
+.evidence-viewer-loading,
+.evidence-viewer-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--content-secondary);
+  height: 100%;
+
+  .material-symbols {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+  }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    max-width: 250px;
+    line-height: 1.5;
+  }
+}
+
+.evidence-viewer-loading {
+  .loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--green-50);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 16px;
+  }
+}
+
+.evidence-viewer-error {
+  color: var(--red-50);
+
+  .material-symbols {
+    opacity: 1;
+    color: var(--red-50);
+  }
+}
+
+// ===== Cited/Non-cited Evidence Item Styles =====
+
+.evidence-item--cited {
+  .log-entry-header {
+    border-left: 4px solid var(--green-50);
+    background: linear-gradient(90deg, rgba(30, 166, 116, 0.08) 0%, transparent 100%);
+  }
+
+  .evidence-score {
+    background: var(--green-10);
+    color: var(--green-70);
+  }
+}
+
+.evidence-item--non-cited {
+  .log-entry-header {
+    border-left: 4px solid var(--content-disabled);
+    opacity: 0.75;
+  }
+
+  &:hover .log-entry-header {
+    opacity: 1;
+  }
+}
+
+// ===== References Panel Styles =====
+
+.references-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-light-secondary);
+}
+
+.references-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-light-primary);
+
+  .references-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .material-symbols {
+      font-size: 20px;
+      color: var(--green-50);
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+  }
+
+  .references-panel-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .references-panel-count {
+    font-size: 12px;
+    color: var(--content-secondary);
+  }
+
+  .references-panel-processing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--yellow-60);
+  }
+}
+
+.references-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.references-panel-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--red-10);
+  border-bottom: 1px solid var(--red-30);
+  color: var(--red-60);
+  font-size: 12px;
+
+  .material-symbols {
+    font-size: 16px;
+    color: var(--red-50);
+  }
+}
+
+// Reference Upload
+.reference-upload {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.reference-upload-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-light-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--content-secondary);
+  font-size: 13px;
+
+  .material-symbols {
+    font-size: 32px;
+    opacity: 0.5;
+  }
+
+  &:hover {
+    border-color: var(--green-40);
+    background: var(--green-10);
+    color: var(--green-60);
+
+    .material-symbols {
+      opacity: 1;
+      color: var(--green-50);
+    }
+  }
+
+  &--dragging {
+    border-color: var(--green-50);
+    background: var(--green-10);
+    color: var(--green-60);
+
+    .material-symbols {
+      opacity: 1;
+      color: var(--green-50);
+    }
+  }
+}
+
+// Reference Status Icon Spinning Animation
+.reference-status-icon--spinning {
+  animation: spin 1s linear infinite;
+}
+
+// ===== Toggle Button for Toolbar =====
+
+.toolbar-evidence-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--content-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  .material-symbols {
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: var(--bg-light-tertiary);
+    color: var(--content-primary);
+  }
+
+  &.active {
+    background: var(--green-10);
+    color: var(--green-50);
+    border-color: var(--green-30);
   }
 }

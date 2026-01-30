@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Form, Nav, Tab } from 'react-bootstrap'
-import { EvidenceProvider, useEvidenceContext } from '../context/evidence-context'
+import { useEvidenceContext } from '../context/evidence-context'
 import { useEvidenceTrackerIntegration } from '../hooks/use-evidence-tracker-integration'
 import { EvidenceSearchBar } from './evidence-search-bar'
 import { EvidenceList } from './evidence-list'
@@ -9,6 +9,7 @@ import { ReferencesTab } from './references-tab'
 import { FullSizeLoadingSpinner } from '@/shared/components/loading-spinner'
 import MaterialIcon from '@/shared/components/material-icon'
 import withErrorBoundary from '@/infrastructure/error-boundary'
+import { ReferencesContext } from '@/features/ide-react/context/references-context'
 
 import '../../stylesheets/evidence-panel.scss'
 
@@ -23,6 +24,10 @@ const SearchTabContent = React.memo(function SearchTabContent() {
     searchEvidence,
     clearResults,
   } = useEvidenceContext()
+
+  // Get reference keys for cited/non-cited differentiation
+  const referencesContext = useContext(ReferencesContext)
+  const referenceKeys = referencesContext?.referenceKeys
 
   // Integrate with CodeMirror evidence tracker
   useEvidenceTrackerIntegration()
@@ -95,7 +100,10 @@ const SearchTabContent = React.memo(function SearchTabContent() {
                 (Estimated relevance)
               </span>
             </div>
-            <EvidenceList results={searchState.results} />
+            <EvidenceList
+              results={searchState.results}
+              referenceKeys={referenceKeys}
+            />
           </>
         )}
 
@@ -198,11 +206,7 @@ const EvidencePanelWithBoundary = withErrorBoundary(
 )
 
 export function EvidencePanel() {
-  return (
-    <EvidenceProvider>
-      <EvidencePanelWithBoundary />
-    </EvidenceProvider>
-  )
+  return <EvidencePanelWithBoundary />
 }
 
 export default EvidencePanel
