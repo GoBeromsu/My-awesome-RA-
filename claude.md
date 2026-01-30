@@ -1,59 +1,95 @@
-**Project**: _My Awesome RA_
+**Project**: My Awesome RA
 **Purpose**: AI Agent service for reference-grounded LaTeX paper writing
-**Core Technologies**: Upstage SOLAR API, Document Parsing, Information Extraction, Streamlit
-## Details
-- Upstage API (https://console.upstage.ai/docs/getting-started)
+**License**: AGPL-3.0 (due to Overleaf CE dependency)
 
-## 1. Problem Definition
+## Core Technologies
+- Upstage SOLAR API (Embedding, Document Parse, Information Extraction)
+- FastAPI + FAISS (Vector search backend)
+- Overleaf CE (LaTeX editor with Evidence Panel module)
 
-### 1.1 Background
+## Folder Structure (Fixed)
 
-Academic paper writing in LaTeX, especially for conference/journal submission, involves repetitive and high-friction tasks beyond actual ideation:
+```
+my-awesome-ra/
+├── overleaf/                    # Overleaf CE (git submodule)
+│   └── services/web/modules/
+│       └── evidence-panel/      # Evidence Panel UI module (Phase 3)
+│
+├── apps/
+│   └── api/                     # FastAPI backend
+│       ├── src/
+│       │   ├── main.py          # App entry point
+│       │   ├── routers/         # API endpoints
+│       │   ├── services/        # Business logic
+│       │   └── models/          # Pydantic models
+│       ├── tests/
+│       ├── pyproject.toml       # uv dependencies
+│       └── Dockerfile
+│
+├── packages/
+│   ├── solar-client/            # SOLAR API Python wrapper
+│   │   ├── solar_client/
+│   │   └── pyproject.toml
+│   │
+│   └── evidence-types/          # Shared TypeScript types
+│       ├── src/
+│       └── package.json
+│
+├── deployment/
+│   ├── docker-compose.yml       # Production
+│   ├── docker-compose.dev.yml   # Development
+│   └── docker-compose.overleaf.yml
+│
+├── scripts/
+│   ├── setup.sh                 # Project setup
+│   ├── dev.sh                   # Dev server
+│   └── build-module.sh          # Build evidence panel
+│
+├── data/                        # .gitignore (except .gitkeep)
+│   ├── embeddings/
+│   ├── faiss/
+│   └── parsed/
+│
+├── .claude/                     # Claude Code configuration
+├── .env                         # Secrets (gitignored)
+├── .env.example
+├── spec.md                      # MVP specification
+├── context.md                   # Project context
+└── README.md
+```
 
-- Navigating submission rules and formatting requirements
-- Managing growing reference sets
-- Verifying whether written claims are correctly and precisely supported by cited literature
+## API Endpoints
 
-As the number of references and document sections increases, authors experience significant **context switching** between:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/evidence/search` | Search evidence by query |
+| POST | `/documents/parse` | Parse PDF via SOLAR API |
+| POST | `/documents/index` | Index document to FAISS |
+| GET | `/documents/{id}/chunks` | Get document chunks |
+| POST | `/citations/extract` | Extract citation info |
+| GET | `/health` | Health check |
 
-- LaTeX editors
-- PDF viewers
-- Reference managers
-- Notes or memory-based tracking of “which paper supported which claim”
+## Development Commands
 
-This workflow does not scale and degrades writing confidence over time.
+```bash
+# Setup
+./scripts/setup.sh
 
----
+# Run API server
+./scripts/dev.sh
 
-### 1.2 Core Problem
+# Run with Docker
+docker-compose -f deployment/docker-compose.dev.yml up
+```
 
-> During multi-file LaTeX paper writing, it is difficult to maintain a **low-friction, durable mapping** between
-> **(a) the claim currently being written** and
-> **(b) the exact evidence span inside reference PDFs that supports it**.
->
-> As sections are edited, moved, or rewritten, this mapping **decays over time**, leading to excessive context switching and internal consistency drift.
+## Problem Definition
 
-This problem is not solved by traditional reference managers or PDF annotation tools, because the mapping is **contextual to the author’s evolving LaTeX document**, not to static PDFs.
+### Core Problem
+During multi-file LaTeX paper writing, it is difficult to maintain a **low-friction, durable mapping** between:
+- **(a) the claim currently being written** and
+- **(b) the exact evidence span inside reference PDFs that supports it**
 
----
-
-### 1.3 Subproblems
-
-#### A. Evidence Grounding (External Consistency)
-
-- **Input**: Current LaTeX context (sentence / paragraph / section at cursor)
-- **Output**: Exact supporting evidence spans from reference PDFs
-	(“Paper Z, page X, paragraph Y supports this claim”)
-- **Pain Points**:
-	- Manual PDF re-navigation
-	- Loss of grounding confidence
-	- Cognitive overload as references grow
-
-#### B. Document Drift (Internal Consistency)
-
-- Multi-file `.tex` documents evolve non-linearly
-- Definitions, assumptions, and claims may:
-	- diverge across sections
-	- become duplicated or contradictory
-	- remain cited but no longer justified by the original evidence
-- This is treated as a **separate job** with independent acceptance criteria
+### Solution
+Evidence Panel integrated into Overleaf that provides:
+1. **Manual search** (default): User triggers search with selected text
+2. **Auto search** (optional): Automatic context-aware search on cursor move
