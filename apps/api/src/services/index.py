@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import chromadb
 import numpy as np
@@ -33,12 +33,45 @@ class IndexService:
 
         self._load_or_create_index()
 
+    def _build_collection_metadata(self) -> dict[str, Any]:
+        metadata: dict[str, Any] = {"hnsw:space": os.getenv("HNSW_SPACE", "cosine")}
+        int_fields = {
+            "HNSW_M": "hnsw:M",
+            "HNSW_CONSTRUCTION_EF": "hnsw:construction_ef",
+            "HNSW_SEARCH_EF": "hnsw:search_ef",
+            "HNSW_BATCH_SIZE": "hnsw:batch_size",
+            "HNSW_SYNC_THRESHOLD": "hnsw:sync_threshold",
+            "HNSW_NUM_THREADS": "hnsw:num_threads",
+        }
+        for env_key, meta_key in int_fields.items():
+            value = os.getenv(env_key)
+            if value:
+                metadata[meta_key] = int(value)
+
+        resize_factor = os.getenv("HNSW_RESIZE_FACTOR")
+        if resize_factor:
+            metadata["hnsw:resize_factor"] = float(resize_factor)
+
+        batch_size = metadata.get("hnsw:batch_size")
+        sync_threshold = metadata.get("hnsw:sync_threshold")
+        if isinstance(batch_size, int) and isinstance(sync_threshold, int):
+            if batch_size > sync_threshold:
+                logger.warning(
+                    "HNSW_BATCH_SIZE (%s) > HNSW_SYNC_THRESHOLD (%s); "
+                    "clamping batch size to sync threshold.",
+                    batch_size,
+                    sync_threshold,
+                )
+                metadata["hnsw:batch_size"] = sync_threshold
+
+        return metadata
+
     def _init_client_and_collection(self) -> None:
         """Initialize ChromaDB client and collection at self.index_path."""
         self._client = chromadb.PersistentClient(path=str(self.index_path))
         self._collection = self._client.get_or_create_collection(
             name="documents",
-            metadata={"hnsw:space": "cosine"},
+            metadata=self._build_collection_metadata(),
         )
 
     def _load_or_create_index(self) -> None:
@@ -96,17 +129,16 @@ class IndexService:
         if copied > 0:
             logger.info(f"Copied {copied} PDFs from seed to {pdf_storage_path}")
 
-    def _chunk_text(self, text: str) -> list[dict[str, Any]]:
+    def _iter_chunks(self, text: str) -> Iterable[dict[str, Any]]:
         """
-        Split text into overlapping chunks.
+        Yield overlapping chunks.
 
         Args:
             text: Text to chunk.
 
-        Returns:
-            List of chunk dictionaries with text and position info.
+        Yields:
+            Chunk dictionaries with text and position info.
         """
-        chunks = []
         start = 0
 
         while start < len(text):
@@ -122,15 +154,25 @@ class IndexService:
 
             chunk_text = text[start:end].strip()
             if chunk_text:
-                chunks.append({
+                yield {
                     "text": chunk_text,
                     "start_idx": start,
                     "end_idx": end,
-                })
+                }
 
             start = end - self.chunk_overlap if end < len(text) else len(text)
 
-        return chunks
+    def _chunk_text(self, text: str) -> list[dict[str, Any]]:
+        """
+        Split text into overlapping chunks.
+
+        Args:
+            text: Text to chunk.
+
+        Returns:
+            List of chunk dictionaries with text and position info.
+        """
+        return list(self._iter_chunks(text))
 
     async def index_document(
         self,
@@ -154,50 +196,72 @@ class IndexService:
         if self._collection is None:
             self._load_or_create_index()
 
-        chunks = self._chunk_text(content)
-        texts = [c["text"] for c in chunks]
         total_chars = len(content)
+        batch_size = max(1, int(os.getenv("INDEX_BATCH_SIZE", str(self._embedding_service.BATCH_SIZE))))
 
-        embeddings = await self._embedding_service.embed_documents(texts)
+        chunk_count = 0
+        batch_chunks: list[dict[str, Any]] = []
+        batch_indices: list[int] = []
 
-        ids = []
-        embeddings_list = []
-        documents = []
-        metadatas = []
+        async def upsert_batch() -> None:
+            if not batch_chunks:
+                return
 
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-            chunk_id = f"{document_id}_{i}"
+            texts = [c["text"] for c in batch_chunks]
+            embeddings = await self._embedding_service.embed_documents(texts)
 
-            # Find grounding info for this chunk using position-based estimation
-            chunk_grounding = self._find_grounding_for_chunk(chunk, grounding, total_chars)
+            ids: list[str] = []
+            embeddings_list: list[list[float]] = []
+            documents: list[str] = []
+            metadatas: list[dict[str, Any]] = []
 
-            # Normalize for cosine similarity
-            normalized = embedding / np.linalg.norm(embedding)
+            for idx, chunk, embedding in zip(batch_indices, batch_chunks, embeddings):
+                chunk_id = f"{document_id}_{idx}"
 
-            ids.append(chunk_id)
-            embeddings_list.append(normalized.tolist())
-            documents.append(chunk["text"])
-            metadatas.append({
-                "document_id": document_id,
-                "chunk_id": chunk_id,
-                "start_idx": chunk["start_idx"],
-                "end_idx": chunk["end_idx"],
-                "page": chunk_grounding.get("page", 1),
-                "bbox": str(chunk_grounding.get("box")) if chunk_grounding.get("box") else None,
-                **(metadata or {}),
-            })
+                # Find grounding info for this chunk using position-based estimation
+                chunk_grounding = self._find_grounding_for_chunk(chunk, grounding, total_chars)
 
-        # Upsert all chunks at once
-        self._collection.upsert(
-            ids=ids,
-            embeddings=embeddings_list,
-            documents=documents,
-            metadatas=metadatas,
-        )
+                # Normalize for cosine similarity
+                normalized = embedding / np.linalg.norm(embedding)
+
+                ids.append(chunk_id)
+                embeddings_list.append(normalized.tolist())
+                documents.append(chunk["text"])
+                metadatas.append({
+                    "document_id": document_id,
+                    "chunk_id": chunk_id,
+                    "start_idx": chunk["start_idx"],
+                    "end_idx": chunk["end_idx"],
+                    "page": chunk_grounding.get("page", 1),
+                    "bbox": str(chunk_grounding.get("box")) if chunk_grounding.get("box") else None,
+                    **(metadata or {}),
+                })
+
+            # Upsert batch
+            self._collection.upsert(
+                ids=ids,
+                embeddings=embeddings_list,
+                documents=documents,
+                metadatas=metadatas,
+            )
+
+            batch_chunks.clear()
+            batch_indices.clear()
+
+        for chunk in self._iter_chunks(content):
+            batch_chunks.append(chunk)
+            batch_indices.append(chunk_count)
+            chunk_count += 1
+
+            if len(batch_chunks) >= batch_size:
+                await upsert_batch()
+
+        if batch_chunks:
+            await upsert_batch()
 
         return {
             "document_id": document_id,
-            "chunk_count": len(chunks),
+            "chunk_count": chunk_count,
         }
 
     def _find_grounding_for_chunk(
