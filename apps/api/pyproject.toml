@@ -10,7 +10,7 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "httpx>=0.28.0",
     "python-multipart>=0.0.17",
-    "faiss-cpu>=1.9.0",
+    "chromadb>=0.4.22",
     "numpy>=1.26.0",
 ]
 

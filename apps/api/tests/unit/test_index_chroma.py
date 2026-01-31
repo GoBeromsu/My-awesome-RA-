@@ -1,4 +1,4 @@
-"""Unit tests for FAISS index operations."""
+"""Unit tests for ChromaDB index operations."""
 
 import numpy as np
 import pytest
@@ -23,16 +23,16 @@ class TestIndexDocument:
         assert result["chunk_count"] <= len(content) // 100  # Reasonable bound
 
     @pytest.mark.asyncio
-    async def test_index_document_stores_in_faiss(self, isolated_index_service) -> None:
-        """Verify FAISS index ntotal increases after indexing."""
-        initial_count = isolated_index_service._index.ntotal
+    async def test_index_document_stores_in_chroma(self, isolated_index_service) -> None:
+        """Verify ChromaDB collection count increases after indexing."""
+        initial_count = isolated_index_service._collection.count()
 
         await isolated_index_service.index_document(
             document_id="test-doc-002",
             content="Document content for testing vector storage.",
         )
 
-        final_count = isolated_index_service._index.ntotal
+        final_count = isolated_index_service._collection.count()
         assert final_count > initial_count
 
     @pytest.mark.asyncio
@@ -62,21 +62,14 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_search_returns_results(self, seed_index_service) -> None:
         """Verify search returns non-empty results from seed index."""
-        # Use embedding from existing metadata to ensure match
-        # Reconstruct a vector from the index that we know exists
-        if seed_index_service._index.ntotal > 0:
-            existing_vector = seed_index_service._index.reconstruct(0)
-            # Add small noise to avoid exact match
-            query_embedding = existing_vector + np.random.default_rng(42).random(4096).astype(np.float32) * 0.01
-            query_embedding = query_embedding / np.linalg.norm(query_embedding)
-        else:
-            query_embedding = np.random.default_rng(42).random(4096).astype(np.float32)
-            query_embedding = query_embedding / np.linalg.norm(query_embedding)
+        # Generate a random query vector
+        query_embedding = np.random.default_rng(42).random(4096).astype(np.float32)
+        query_embedding = query_embedding / np.linalg.norm(query_embedding)
 
         results = await seed_index_service.search(
             embedding=query_embedding,
             top_k=5,
-            threshold=-1.0,  # Use -1.0 to accept all results (cosine can be negative)
+            threshold=-1.0,  # Accept all results
         )
 
         assert len(results) > 0
@@ -93,7 +86,7 @@ class TestSearch:
             results = await seed_index_service.search(
                 embedding=query_embedding,
                 top_k=top_k,
-                threshold=0.0,
+                threshold=-1.0,  # Accept all results
             )
             assert len(results) <= top_k
 
@@ -139,7 +132,7 @@ class TestSearch:
         results = await seed_index_service.search(
             embedding=query_embedding,
             top_k=10,
-            threshold=0.0,
+            threshold=-1.0,  # Accept all results
         )
 
         if len(results) >= 2:
@@ -243,14 +236,14 @@ class TestDeleteDocument:
             content="Content to be deleted. " * 20,
         )
 
-        initial_count = isolated_index_service._index.ntotal
+        initial_count = isolated_index_service._collection.count()
         assert initial_count > 0
 
         # Delete the document
         deleted = isolated_index_service.delete_document("delete-test-001")
 
         assert deleted > 0
-        assert isolated_index_service._index.ntotal < initial_count
+        assert isolated_index_service._collection.count() < initial_count
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent_returns_zero(
@@ -289,19 +282,18 @@ class TestDeleteDocument:
     async def test_delete_all_documents_creates_empty_index(
         self, isolated_index_service
     ) -> None:
-        """Verify deleting all documents leaves empty index."""
+        """Verify deleting all documents leaves empty collection."""
         # Index a single document
         await isolated_index_service.index_document(
             document_id="only-doc-001",
             content="Single document content. " * 10,
         )
 
-        assert isolated_index_service._index.ntotal > 0
+        assert isolated_index_service._collection.count() > 0
 
         # Delete the only document
         deleted = isolated_index_service.delete_document("only-doc-001")
 
         assert deleted > 0
-        assert isolated_index_service._index.ntotal == 0
-        assert isolated_index_service._metadata == []
+        assert isolated_index_service._collection.count() == 0
         assert isolated_index_service.list_documents() == []

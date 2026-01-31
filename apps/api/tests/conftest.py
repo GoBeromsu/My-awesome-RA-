@@ -2,9 +2,8 @@
 
 import os
 import shutil
-import tempfile
 from pathlib import Path
-from typing import AsyncGenerator, Generator
+from typing import Generator
 from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
@@ -46,7 +45,6 @@ def mock_embedding_service() -> MagicMock:
     Uses a seeded random generator for reproducible results.
     """
     mock = MagicMock()
-    rng = np.random.default_rng(42)
 
     def generate_embedding(text: str) -> NDArray[np.float32]:
         """Generate deterministic embedding based on text hash."""
@@ -108,17 +106,23 @@ def seed_index_service(
     mock_embedding_service: MagicMock,
 ) -> Generator:
     """
-    Create IndexService pre-loaded with seed fixtures (17 chunks).
+    Create IndexService pre-loaded with seed fixtures.
 
     Copies seed data to temp directory for isolation.
     """
     original_env = os.environ.get("VECTOR_STORE_PATH")
     original_seed = os.environ.get("SEED_INDEX_PATH")
 
-    # Copy seed fixtures to temp directory
+    # Copy seed fixtures to temp directory (ChromaDB structure)
     if seed_fixtures_path.exists():
-        shutil.copy(seed_fixtures_path / "index.faiss", temp_index_path / "index.faiss")
-        shutil.copy(seed_fixtures_path / "metadata.npy", temp_index_path / "metadata.npy")
+        for item in seed_fixtures_path.iterdir():
+            if item.is_file():
+                shutil.copy(item, temp_index_path / item.name)
+            elif item.is_dir() and item.name != "pdfs":
+                target_dir = temp_index_path / item.name
+                if target_dir.exists():
+                    shutil.rmtree(target_dir)
+                shutil.copytree(item, target_dir)
 
     os.environ["VECTOR_STORE_PATH"] = str(temp_index_path)
     os.environ["SEED_INDEX_PATH"] = str(seed_fixtures_path)
@@ -153,10 +157,16 @@ def client_with_seed(
     original_env = os.environ.get("VECTOR_STORE_PATH")
     original_seed = os.environ.get("SEED_INDEX_PATH")
 
-    # Copy seed fixtures
+    # Copy seed fixtures (ChromaDB structure)
     if seed_fixtures_path.exists():
-        shutil.copy(seed_fixtures_path / "index.faiss", temp_index_path / "index.faiss")
-        shutil.copy(seed_fixtures_path / "metadata.npy", temp_index_path / "metadata.npy")
+        for item in seed_fixtures_path.iterdir():
+            if item.is_file():
+                shutil.copy(item, temp_index_path / item.name)
+            elif item.is_dir() and item.name != "pdfs":
+                target_dir = temp_index_path / item.name
+                if target_dir.exists():
+                    shutil.rmtree(target_dir)
+                shutil.copytree(item, target_dir)
 
     os.environ["VECTOR_STORE_PATH"] = str(temp_index_path)
     os.environ["SEED_INDEX_PATH"] = str(seed_fixtures_path)
