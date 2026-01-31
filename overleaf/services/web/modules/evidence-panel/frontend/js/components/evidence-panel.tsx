@@ -2,7 +2,6 @@ import React, { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Form, Nav, Tab } from 'react-bootstrap'
 import { useEvidenceContext } from '../context/evidence-context'
-import { useEvidenceTrackerIntegration } from '../hooks/use-evidence-tracker-integration'
 import { EvidenceSearchBar } from './evidence-search-bar'
 import { EvidenceList } from './evidence-list'
 import { ReferencesTab } from './references-tab'
@@ -28,9 +27,6 @@ const SearchTabContent = React.memo(function SearchTabContent() {
   // Get reference keys for cited/non-cited differentiation
   const referencesContext = useContext(ReferencesContext)
   const referenceKeys = referencesContext?.referenceKeys
-
-  // Integrate with CodeMirror evidence tracker
-  useEvidenceTrackerIntegration()
 
   const handleManualSearch = (query: string) => {
     searchEvidence(query)

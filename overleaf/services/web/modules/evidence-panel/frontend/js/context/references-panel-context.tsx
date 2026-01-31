@@ -21,6 +21,15 @@ import { useReferencesContext } from '@/features/ide-react/context/references-co
 
 export type { IndexStatus }
 
+/**
+ * Parsed bibliographic metadata for a reference
+ */
+export interface BibMetadata {
+  title: string
+  authors: string
+  year: string
+}
+
 export interface ReferencePaper {
   citeKey: string
   title?: string
@@ -46,6 +55,8 @@ export interface ReferencesPanelContextValue {
   reindexPaper: (documentId: string) => Promise<void>
   removePaper: (documentId: string) => Promise<void>
   uploadPdf: (file: File, citeKey?: string) => Promise<string | null>
+  /** Get bib metadata for a cite key (returns undefined if not found) */
+  getBibMetadata: (citeKey: string) => BibMetadata | undefined
 }
 
 export const ReferencesPanelContext = createContext<
@@ -131,8 +142,9 @@ function createPaperFromOrphanDoc(doc: IndexedDocument): ReferencePaper {
 export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
   children,
 }) => {
-  const { referenceKeys, indexAllReferences } = useReferencesContext()
+  const { referenceKeys, indexAllReferences, searchLocalReferences } = useReferencesContext()
   const { bibEntries, refresh: refreshBibEntries } = useBibEntries(referenceKeys)
+  const [bibMetadataMap, setBibMetadataMap] = useState<Map<string, BibMetadata>>(new Map())
   const {
     documents: indexedDocs,
     isLoading: apiLoading,
@@ -151,6 +163,46 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
   useEffect(() => {
     if (apiError) setError(apiError)
   }, [apiError])
+
+  // Fetch bib metadata from Overleaf's reference indexer
+  useEffect(() => {
+    const fetchBibMetadata = async () => {
+      if (referenceKeys.size === 0) {
+        setBibMetadataMap(new Map())
+        return
+      }
+
+      const newMap = new Map<string, BibMetadata>()
+
+      // Search for each reference key to get its bib entry
+      // We batch search to avoid too many calls
+      for (const key of referenceKeys) {
+        try {
+          const result = await searchLocalReferences(key)
+          if (result.hits && result.hits.length > 0) {
+            // Find exact match by EntryKey
+            const match = result.hits.find(
+              hit => hit._source?.EntryKey?.toLowerCase() === key.toLowerCase()
+            )
+            if (match && match._source?.Fields) {
+              const fields = match._source.Fields
+              newMap.set(key.toLowerCase(), {
+                title: fields.title || '',
+                authors: fields.author || '',
+                year: fields.year || fields.date?.slice(0, 4) || '',
+              })
+            }
+          }
+        } catch {
+          // Ignore errors for individual keys
+        }
+      }
+
+      setBibMetadataMap(newMap)
+    }
+
+    fetchBibMetadata()
+  }, [referenceKeys, searchLocalReferences])
 
   // Initial load
   useEffect(() => {
@@ -206,14 +258,32 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
     [removeDocument]
   )
 
-  // Merge bib entries with indexed documents
+  // Get bib metadata for a cite key
+  const getBibMetadata = useCallback(
+    (citeKey: string): BibMetadata | undefined => {
+      return bibMetadataMap.get(citeKey.toLowerCase())
+    },
+    [bibMetadataMap]
+  )
+
+  // Merge bib entries with indexed documents and bib metadata
   const papers = useMemo<ReferencePaper[]>(() => {
     const lookupMaps = createDocumentLookupMaps(indexedDocs)
 
-    // Build papers from bib entries
+    // Build papers from bib entries, enriching with bib metadata
     const papersFromBib = bibEntries.map(entry => {
       const indexedDoc = findMatchingDocument(entry.citeKey, lookupMaps)
-      return createPaperFromBibEntry(entry, indexedDoc)
+      const bibMeta = bibMetadataMap.get(entry.citeKey.toLowerCase())
+
+      // Enrich entry with bib metadata if available
+      const enrichedEntry: BibEntry = {
+        ...entry,
+        title: entry.title || bibMeta?.title,
+        authors: entry.authors || bibMeta?.authors,
+        year: entry.year || bibMeta?.year,
+      }
+
+      return createPaperFromBibEntry(enrichedEntry, indexedDoc)
     })
 
     // Find orphan indexed docs (not matched to any bib entry)
@@ -232,7 +302,7 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
     const orphanPapers = orphanDocs.map(createPaperFromOrphanDoc)
 
     return [...papersFromBib, ...orphanPapers]
-  }, [bibEntries, indexedDocs])
+  }, [bibEntries, indexedDocs, bibMetadataMap])
 
   const value = useMemo<ReferencesPanelContextValue>(
     () => ({
@@ -246,6 +316,7 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
       reindexPaper,
       removePaper,
       uploadPdf,
+      getBibMetadata,
     }),
     [
       papers,
@@ -258,6 +329,7 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
       reindexPaper,
       removePaper,
       uploadPdf,
+      getBibMetadata,
     ]
   )
 

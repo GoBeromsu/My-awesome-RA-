@@ -767,24 +767,24 @@
 // ===== Cited/Non-cited Evidence Item Styles =====
 
 .evidence-item--cited {
-  .log-entry-header {
+  .evidence-item-header {
     border-left: 4px solid var(--green-50);
     background: linear-gradient(90deg, rgba(30, 166, 116, 0.08) 0%, transparent 100%);
   }
 
-  .evidence-score {
+  .evidence-item-score {
     background: var(--green-10);
     color: var(--green-70);
   }
 }
 
 .evidence-item--non-cited {
-  .log-entry-header {
+  .evidence-item-header {
     border-left: 4px solid var(--content-disabled);
     opacity: 0.75;
   }
 
-  &:hover .log-entry-header {
+  &:hover .evidence-item-header {
     opacity: 1;
   }
 }

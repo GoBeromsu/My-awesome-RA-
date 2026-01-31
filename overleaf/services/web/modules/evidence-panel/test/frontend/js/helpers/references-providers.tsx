@@ -41,6 +41,7 @@ const defaultContextValue: ReferencesPanelContextValue = {
   reindexPaper: async () => {},
   removePaper: async () => {},
   uploadPdf: async () => null,
+  getBibMetadata: () => undefined,
 }
 
 interface ReferencesProviderWrapperProps {

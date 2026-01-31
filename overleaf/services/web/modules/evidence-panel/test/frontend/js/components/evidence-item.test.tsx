@@ -1,10 +1,11 @@
 import { expect } from 'chai'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
 import sinon from 'sinon'
 import React from 'react'
 
 import { EvidenceItem } from '../../../../frontend/js/components/evidence-item'
 import { createMockResult } from '../helpers/evidence-providers'
+import { renderWithReferencesContext } from '../helpers/references-providers'
 
 describe('<EvidenceItem />', function () {
   let clipboardStub: sinon.SinonStub
@@ -44,16 +45,17 @@ describe('<EvidenceItem />', function () {
         year: 2023,
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByText('Research Paper Title')).to.exist
-      expect(screen.getByText('Smith, J. and Doe, A. (2023)')).to.exist
+      // New format: "Last Name et al. (Year)" for multiple authors
+      expect(screen.getByText('Smith et al. (2023)')).to.exist
     })
 
     it('displays rank number', function () {
       const result = createMockResult()
 
-      render(<EvidenceItem result={result} rank={3} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={3} />)
 
       expect(screen.getByText('#3')).to.exist
     })
@@ -64,9 +66,10 @@ describe('<EvidenceItem />', function () {
         year: null,
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
-      expect(screen.getByText('Smith, J.')).to.exist
+      // New format: just last name for single author
+      expect(screen.getByText('Smith')).to.exist
     })
 
     it('displays year without authors when authors is empty', function () {
@@ -75,7 +78,7 @@ describe('<EvidenceItem />', function () {
         year: 2023,
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByText('(2023)')).to.exist
     })
@@ -83,7 +86,7 @@ describe('<EvidenceItem />', function () {
     it('has listitem role for accessibility', function () {
       const result = createMockResult()
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByRole('listitem')).to.exist
     })
@@ -93,7 +96,7 @@ describe('<EvidenceItem />', function () {
     it('shows relevance score as percentage', function () {
       const result = createMockResult({ score: 0.85 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByText('85%')).to.exist
     })
@@ -101,7 +104,7 @@ describe('<EvidenceItem />', function () {
     it('applies high score class for scores >= 80%', function () {
       const result = createMockResult({ score: 0.85 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const scoreElement = screen.getByText('85%')
       expect(scoreElement.classList.contains('score-high')).to.be.true
@@ -110,7 +113,7 @@ describe('<EvidenceItem />', function () {
     it('applies medium score class for scores 60-79%', function () {
       const result = createMockResult({ score: 0.7 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const scoreElement = screen.getByText('70%')
       expect(scoreElement.classList.contains('score-medium')).to.be.true
@@ -119,7 +122,7 @@ describe('<EvidenceItem />', function () {
     it('applies low score class for scores < 60%', function () {
       const result = createMockResult({ score: 0.5 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const scoreElement = screen.getByText('50%')
       expect(scoreElement.classList.contains('score-low')).to.be.true
@@ -128,7 +131,7 @@ describe('<EvidenceItem />', function () {
     it('rounds score percentage to nearest integer', function () {
       const result = createMockResult({ score: 0.876 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByText('88%')).to.exist
     })
@@ -140,7 +143,7 @@ describe('<EvidenceItem />', function () {
         snippet: 'This is the snippet text.',
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.queryByText('This is the snippet text.')).to.not.exist
     })
@@ -150,7 +153,7 @@ describe('<EvidenceItem />', function () {
         snippet: 'This is the snippet text that should appear when expanded.',
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -165,7 +168,7 @@ describe('<EvidenceItem />', function () {
         snippet: 'Snippet text',
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
 
@@ -181,7 +184,7 @@ describe('<EvidenceItem />', function () {
     it('toggles aria-expanded attribute', function () {
       const result = createMockResult()
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const expandButton = screen.getByLabelText('Expand')
       expect(expandButton.getAttribute('aria-expanded')).to.equal('false')
@@ -196,7 +199,7 @@ describe('<EvidenceItem />', function () {
     it('changes expand icon based on state', function () {
       const result = createMockResult()
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByLabelText('Expand')).to.exist
 
@@ -211,7 +214,7 @@ describe('<EvidenceItem />', function () {
     it('displays page number when available', function () {
       const result = createMockResult({ page: 42 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -222,7 +225,7 @@ describe('<EvidenceItem />', function () {
     it('does not display page section when page is null', function () {
       const result = createMockResult({ page: null })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -235,7 +238,7 @@ describe('<EvidenceItem />', function () {
         sourcePdf: '/documents/research-paper.pdf',
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -246,7 +249,7 @@ describe('<EvidenceItem />', function () {
     it('does not display source PDF section when empty', function () {
       const result = createMockResult({ sourcePdf: '' })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -260,7 +263,7 @@ describe('<EvidenceItem />', function () {
         snippet: 'Important quote from the paper.',
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -278,7 +281,7 @@ describe('<EvidenceItem />', function () {
         snippet: 'Text to be copied.',
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -293,7 +296,7 @@ describe('<EvidenceItem />', function () {
     it('has copy button with title tooltip', function () {
       const result = createMockResult()
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const header = screen.getByText(result.title).closest('.evidence-item-header')!
       fireEvent.click(header)
@@ -310,7 +313,7 @@ describe('<EvidenceItem />', function () {
 
       const result = createMockResult({ title: longTitle })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       const titleElement = screen.getByText(longTitle)
       expect(titleElement.getAttribute('title')).to.equal(longTitle)
@@ -319,7 +322,7 @@ describe('<EvidenceItem />', function () {
     it('handles score of 0', function () {
       const result = createMockResult({ score: 0 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByText('0%')).to.exist
     })
@@ -327,7 +330,7 @@ describe('<EvidenceItem />', function () {
     it('handles score of 1 (100%)', function () {
       const result = createMockResult({ score: 1 })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
       expect(screen.getByText('100%')).to.exist
     })
@@ -338,14 +341,14 @@ describe('<EvidenceItem />', function () {
         year: null,
       })
 
-      render(<EvidenceItem result={result} rank={1} />)
+      renderWithReferencesContext(<EvidenceItem result={result} rank={1} />)
 
-      // Citation should be empty or not show anything meaningful
+      // Citation element should not be rendered when both are empty
       const citationElement = screen.getByText(result.title)
         .closest('.evidence-item-header')
         ?.querySelector('.evidence-item-citation')
 
-      expect(citationElement?.textContent?.trim()).to.equal('')
+      expect(citationElement).to.be.null
     })
   })
 })
