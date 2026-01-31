@@ -4,6 +4,11 @@ import {
   EVIDENCE_PARAGRAPH_CHANGE_EVENT,
   ParagraphChangeDetail,
 } from '@/features/source-editor/extensions/evidence-tracker'
+import { EVIDENCE_SHOW_EVENT } from '../constants/events'
+import {
+  MIN_PARAGRAPH_LENGTH_FOR_SEARCH,
+  MAX_PARAGRAPH_LENGTH_FOR_SEARCH,
+} from '../constants/search'
 
 /**
  * Hook that integrates the CodeMirror evidence tracker with the Evidence Panel.
@@ -30,9 +35,16 @@ export const useEvidenceTrackerIntegration = () => {
       lastParagraphRef.current = paragraph
       setCurrentParagraph(paragraph)
 
-      // Trigger search if paragraph is meaningful
-      if (paragraph && paragraph.length >= 20) {
+      // Trigger search if paragraph is meaningful (not too short or too long)
+      if (
+        paragraph &&
+        paragraph.length >= MIN_PARAGRAPH_LENGTH_FOR_SEARCH &&
+        paragraph.length <= MAX_PARAGRAPH_LENGTH_FOR_SEARCH
+      ) {
         searchEvidence(paragraph)
+
+        // Dispatch event to show Evidence view in PDF panel
+        window.dispatchEvent(new CustomEvent(EVIDENCE_SHOW_EVENT))
       }
     },
     [autoMode, searchEvidence, setCurrentParagraph]

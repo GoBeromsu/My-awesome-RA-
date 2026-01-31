@@ -9,6 +9,8 @@ import React, {
   FC,
   ReactNode,
 } from 'react'
+import { useBibEntries, BibEntry } from '../hooks/use-bib-entries'
+import { useReferencesContext } from '@/features/ide-react/context/references-context'
 
 declare global {
   interface Window {
@@ -16,26 +18,54 @@ declare global {
   }
 }
 
-export type DocumentStatus = 'processing' | 'indexed' | 'error'
+const API_BASE_URL = window.__EVIDENCE_API_URL__ || 'http://localhost:8000'
+const POLL_INTERVAL = 2000
 
-export interface IndexedDocument {
+export type IndexStatus = 'none' | 'indexing' | 'indexed' | 'error'
+
+export interface ReferencePaper {
+  citeKey: string
+  title?: string
+  authors?: string
+  year?: string
+  // PDF status
+  hasPdf: boolean
+  pdfFileId?: string
+  pdfFilename?: string
+  // Indexing status
+  indexStatus: IndexStatus
+  documentId?: string
+  chunkCount?: number
+  error?: string
+}
+
+interface IndexedDocumentResponse {
+  document_id: string
+  title: string | null
+  authors: string | null
+  chunk_count: number
+  indexed_at: string | null
+}
+
+interface IndexedDocument {
   documentId: string
   title: string
-  status: DocumentStatus
+  status: 'processing' | 'indexed' | 'error'
   chunkCount?: number
-  indexedAt?: string
   message?: string
 }
 
 export interface ReferencesPanelContextValue {
-  documents: IndexedDocument[]
+  papers: ReferencePaper[]
   isLoading: boolean
   error: string | null
-  fetchDocuments: () => Promise<void>
-  uploadDocument: (file: File) => Promise<string | null>
-  deleteDocument: (documentId: string) => Promise<void>
-  reindexDocument: (documentId: string) => Promise<void>
-  getDocumentStatus: (documentId: string) => Promise<DocumentStatus | null>
+  selectedDocId: string | null
+  setSelectedDocId: (docId: string | null) => void
+  refreshAll: () => Promise<void>
+  indexPaper: (citeKey: string, file: File) => Promise<void>
+  reindexPaper: (documentId: string) => Promise<void>
+  removePaper: (documentId: string) => Promise<void>
+  uploadPdf: (file: File) => Promise<string | null>
 }
 
 export const ReferencesPanelContext = createContext<
@@ -44,118 +74,160 @@ export const ReferencesPanelContext = createContext<
 
 interface ReferencesPanelProviderProps {
   children: ReactNode
-  apiBaseUrl?: string
 }
 
 export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
   children,
-  apiBaseUrl,
 }) => {
-  const resolvedApiBaseUrl =
-    apiBaseUrl || window.__EVIDENCE_API_URL__ || 'http://localhost:8000'
+  // Get reference keys from Overleaf's bib parser
+  const { referenceKeys, indexAllReferences } = useReferencesContext()
 
-  const [documents, setDocuments] = useState<IndexedDocument[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  // Get bib entries with PDF matching from file tree
+  const { bibEntries, refresh: refreshBibEntries } = useBibEntries(referenceKeys)
+
+  // State for indexed documents from API
+  const [indexedDocs, setIndexedDocs] = useState<IndexedDocument[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
 
+  // Polling refs
   const pollingIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
-  const fetchDocuments = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-
+  // Fetch indexed documents from API
+  const fetchIndexedDocuments = useCallback(async () => {
     try {
-      const response = await fetch(`${resolvedApiBaseUrl}/documents`)
-
+      const response = await fetch(`${API_BASE_URL}/documents`)
       if (!response.ok) {
         throw new Error(`Failed to fetch documents: ${response.statusText}`)
       }
 
       const data = await response.json()
-
+      if (!Array.isArray(data?.documents)) {
+        throw new Error('Invalid response format: documents array expected')
+      }
       const docs: IndexedDocument[] = data.documents.map(
-        (doc: {
-          document_id: string
-          title?: string
-          chunk_count?: number
-          indexed_at?: string
-        }) => ({
+        (doc: IndexedDocumentResponse) => ({
           documentId: doc.document_id,
           title: doc.title || doc.document_id,
-          status: 'indexed' as DocumentStatus,
+          status: 'indexed' as const,
           chunkCount: doc.chunk_count,
-          indexedAt: doc.indexed_at,
         })
       )
 
-      setDocuments(docs)
+      setIndexedDocs(docs)
+      setError(null)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch documents'
+      setError(message)
+    }
+  }, [])
+
+  // Refresh everything
+  const refreshAll = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Refresh Overleaf's references index
+      await indexAllReferences(false)
+      // Refresh our bib entries
+      refreshBibEntries()
+      // Fetch indexed docs from API
+      await fetchIndexedDocuments()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Refresh failed'
       setError(message)
     } finally {
       setIsLoading(false)
     }
-  }, [resolvedApiBaseUrl])
+  }, [indexAllReferences, refreshBibEntries, fetchIndexedDocuments])
 
-  const getDocumentStatus = useCallback(
-    async (documentId: string): Promise<DocumentStatus | null> => {
+  // Initial load
+  useEffect(() => {
+    const init = async () => {
+      setIsLoading(true)
+      await fetchIndexedDocuments()
+      setIsLoading(false)
+    }
+    init()
+  }, [fetchIndexedDocuments])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      pollingIntervals.current.forEach(interval => clearInterval(interval))
+      pollingIntervals.current.clear()
+    }
+  }, [])
+
+  // Poll document status
+  const pollDocumentStatus = useCallback(
+    async (documentId: string): Promise<void> => {
       try {
         const response = await fetch(
-          `${resolvedApiBaseUrl}/documents/${documentId}/status`
+          `${API_BASE_URL}/documents/${documentId}/status`
         )
 
-        if (!response.ok) {
-          if (response.status === 404) {
-            return null
-          }
-          throw new Error(`Failed to get status: ${response.statusText}`)
-        }
+        if (!response.ok) return
 
         const data = await response.json()
-        return data.status as DocumentStatus
-      } catch {
-        return null
-      }
-    },
-    [resolvedApiBaseUrl]
-  )
 
-  const startPollingStatus = useCallback(
-    (documentId: string) => {
-      // Clear existing polling if any
-      const existingInterval = pollingIntervals.current.get(documentId)
-      if (existingInterval) {
-        clearInterval(existingInterval)
-      }
-
-      const interval = setInterval(async () => {
-        const status = await getDocumentStatus(documentId)
-
-        if (status === 'indexed' || status === 'error') {
+        if (data.status === 'indexed' || data.status === 'error') {
           // Stop polling
-          clearInterval(interval)
-          pollingIntervals.current.delete(documentId)
+          const interval = pollingIntervals.current.get(documentId)
+          if (interval) {
+            clearInterval(interval)
+            pollingIntervals.current.delete(documentId)
+          }
 
-          // Refresh document list
-          await fetchDocuments()
-        } else if (status === 'processing') {
-          // Update document status in state
-          setDocuments(prev =>
+          // Update state
+          setIndexedDocs(prev =>
             prev.map(doc =>
               doc.documentId === documentId
-                ? { ...doc, status: 'processing' }
+                ? {
+                    ...doc,
+                    status: data.status,
+                    chunkCount: data.chunk_count,
+                    message: data.message,
+                  }
                 : doc
             )
           )
-        }
-      }, 2000) // Poll every 2 seconds
 
-      pollingIntervals.current.set(documentId, interval)
+          // Refresh full list if indexed
+          if (data.status === 'indexed') {
+            await fetchIndexedDocuments()
+          }
+        }
+      } catch (err) {
+        // Non-fatal polling error - log for debugging
+        console.debug('[Evidence] Polling error:', err)
+      }
     },
-    [getDocumentStatus, fetchDocuments]
+    [fetchIndexedDocuments]
   )
 
-  const uploadDocument = useCallback(
+  // Start polling for a document
+  const startPolling = useCallback(
+    (documentId: string) => {
+      // Clear existing interval
+      const existing = pollingIntervals.current.get(documentId)
+      if (existing) {
+        clearInterval(existing)
+      }
+
+      const interval = setInterval(
+        () => pollDocumentStatus(documentId),
+        POLL_INTERVAL
+      )
+      pollingIntervals.current.set(documentId, interval)
+    },
+    [pollDocumentStatus]
+  )
+
+  // Upload a PDF file
+  const uploadPdf = useCallback(
     async (file: File): Promise<string | null> => {
       setError(null)
 
@@ -163,7 +235,7 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
         const formData = new FormData()
         formData.append('file', file)
 
-        const response = await fetch(`${resolvedApiBaseUrl}/documents/upload`, {
+        const response = await fetch(`${API_BASE_URL}/documents/upload`, {
           method: 'POST',
           body: formData,
         })
@@ -178,7 +250,7 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
         const data = await response.json()
         const documentId = data.document_id
 
-        // Add to documents list with processing status
+        // Add to indexed docs with processing status
         const newDoc: IndexedDocument = {
           documentId,
           title: file.name.replace(/\.pdf$/i, ''),
@@ -186,20 +258,17 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
           message: data.message,
         }
 
-        setDocuments(prev => {
-          // Check if document already exists
+        setIndexedDocs(prev => {
           const exists = prev.some(d => d.documentId === documentId)
           if (exists) {
-            return prev.map(d =>
-              d.documentId === documentId ? newDoc : d
-            )
+            return prev.map(d => (d.documentId === documentId ? newDoc : d))
           }
           return [...prev, newDoc]
         })
 
         // Start polling if processing
         if (data.status === 'processing') {
-          startPollingStatus(documentId)
+          startPolling(documentId)
         }
 
         return documentId
@@ -209,56 +278,26 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
         return null
       }
     },
-    [resolvedApiBaseUrl, startPollingStatus]
+    [startPolling]
   )
 
-  const deleteDocument = useCallback(
-    async (documentId: string) => {
-      setError(null)
-
-      try {
-        const response = await fetch(
-          `${resolvedApiBaseUrl}/documents/${documentId}`,
-          {
-            method: 'DELETE',
-          }
-        )
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(
-            errorData.detail || `Delete failed: ${response.statusText}`
-          )
-        }
-
-        // Remove from local state
-        setDocuments(prev => prev.filter(d => d.documentId !== documentId))
-
-        // Stop any polling for this document
-        const interval = pollingIntervals.current.get(documentId)
-        if (interval) {
-          clearInterval(interval)
-          pollingIntervals.current.delete(documentId)
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Delete failed'
-        setError(message)
-        throw err
-      }
+  // Index a paper (upload its PDF)
+  const indexPaper = useCallback(
+    async (citeKey: string, file: File): Promise<void> => {
+      await uploadPdf(file)
     },
-    [resolvedApiBaseUrl]
+    [uploadPdf]
   )
 
-  const reindexDocument = useCallback(
-    async (documentId: string) => {
+  // Reindex an existing document
+  const reindexPaper = useCallback(
+    async (documentId: string): Promise<void> => {
       setError(null)
 
       try {
         const response = await fetch(
-          `${resolvedApiBaseUrl}/documents/${documentId}/reindex`,
-          {
-            method: 'POST',
-          }
+          `${API_BASE_URL}/documents/${documentId}/reindex`,
+          { method: 'POST' }
         )
 
         if (!response.ok) {
@@ -269,58 +308,145 @@ export const ReferencesPanelProvider: FC<ReferencesPanelProviderProps> = ({
         }
 
         // Update status to processing
-        setDocuments(prev =>
-          prev.map(d =>
-            d.documentId === documentId
-              ? { ...d, status: 'processing' as DocumentStatus }
-              : d
+        setIndexedDocs(prev =>
+          prev.map(doc =>
+            doc.documentId === documentId
+              ? { ...doc, status: 'processing' as const }
+              : doc
           )
         )
 
-        // Start polling for status
-        startPollingStatus(documentId)
+        // Start polling
+        startPolling(documentId)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Reindex failed'
         setError(message)
-        throw err
       }
     },
-    [resolvedApiBaseUrl, startPollingStatus]
+    [startPolling]
   )
 
-  // Cleanup polling intervals on unmount
-  useEffect(() => {
-    return () => {
-      pollingIntervals.current.forEach(interval => clearInterval(interval))
-      pollingIntervals.current.clear()
+  // Remove a document from index
+  const removePaper = useCallback(async (documentId: string): Promise<void> => {
+    setError(null)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(
+          errorData.detail || `Delete failed: ${response.statusText}`
+        )
+      }
+
+      // Remove from local state
+      setIndexedDocs(prev => prev.filter(d => d.documentId !== documentId))
+
+      // Stop any polling
+      const interval = pollingIntervals.current.get(documentId)
+      if (interval) {
+        clearInterval(interval)
+        pollingIntervals.current.delete(documentId)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Delete failed'
+      setError(message)
     }
   }, [])
 
-  // Initial fetch
-  useEffect(() => {
-    fetchDocuments()
-  }, [fetchDocuments])
+  // Merge bib entries with indexed documents
+  const papers = useMemo<ReferencePaper[]>(() => {
+    // Create a map of indexed docs by title (lowercased for matching)
+    const indexedByTitle = new Map<string, IndexedDocument>()
+    const indexedByDocId = new Map<string, IndexedDocument>()
+    for (const doc of indexedDocs) {
+      const titleKey = doc.title.toLowerCase().replace(/\.pdf$/i, '')
+      indexedByTitle.set(titleKey, doc)
+      indexedByDocId.set(doc.documentId, doc)
+    }
+
+    // Build papers from bib entries
+    const papersFromBib: ReferencePaper[] = bibEntries.map(entry => {
+      // Try to match indexed doc by cite key or PDF filename
+      const matchKey = entry.citeKey.toLowerCase()
+      const indexedDoc = indexedByTitle.get(matchKey)
+
+      let indexStatus: IndexStatus = 'none'
+      if (indexedDoc) {
+        indexStatus =
+          indexedDoc.status === 'processing'
+            ? 'indexing'
+            : indexedDoc.status === 'error'
+              ? 'error'
+              : 'indexed'
+      }
+
+      return {
+        citeKey: entry.citeKey,
+        title: entry.title,
+        authors: entry.authors,
+        year: entry.year,
+        hasPdf: entry.hasPdf,
+        pdfFileId: entry.pdfFileId,
+        pdfFilename: entry.pdfFilename,
+        indexStatus,
+        documentId: indexedDoc?.documentId,
+        chunkCount: indexedDoc?.chunkCount,
+        error: indexedDoc?.message,
+      }
+    })
+
+    // Add orphan indexed docs (not in bib)
+    const bibCiteKeys = new Set(bibEntries.map(e => e.citeKey.toLowerCase()))
+    const orphanDocs = indexedDocs.filter(
+      doc => !bibCiteKeys.has(doc.title.toLowerCase().replace(/\.pdf$/i, ''))
+    )
+
+    const orphanPapers: ReferencePaper[] = orphanDocs.map(doc => ({
+      citeKey: doc.title,
+      title: doc.title,
+      hasPdf: true,
+      indexStatus:
+        doc.status === 'processing'
+          ? 'indexing'
+          : doc.status === 'error'
+            ? 'error'
+            : 'indexed',
+      documentId: doc.documentId,
+      chunkCount: doc.chunkCount,
+      error: doc.message,
+    }))
+
+    return [...papersFromBib, ...orphanPapers]
+  }, [bibEntries, indexedDocs])
 
   const value = useMemo<ReferencesPanelContextValue>(
     () => ({
-      documents,
+      papers,
       isLoading,
       error,
-      fetchDocuments,
-      uploadDocument,
-      deleteDocument,
-      reindexDocument,
-      getDocumentStatus,
+      selectedDocId,
+      setSelectedDocId,
+      refreshAll,
+      indexPaper,
+      reindexPaper,
+      removePaper,
+      uploadPdf,
     }),
     [
-      documents,
+      papers,
       isLoading,
       error,
-      fetchDocuments,
-      uploadDocument,
-      deleteDocument,
-      reindexDocument,
-      getDocumentStatus,
+      selectedDocId,
+      setSelectedDocId,
+      refreshAll,
+      indexPaper,
+      reindexPaper,
+      removePaper,
+      uploadPdf,
     ]
   )
 
