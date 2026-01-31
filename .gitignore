@@ -79,3 +79,10 @@ overleaf/develop/clsi-texlive/
 overleaf/develop/compiles/
 overleaf/develop/.env
 overleaf/**/node_modules/
+
+# Demo package build artifacts
+my-awesome-ra-demo.tar.gz
+demo-package/data/
+demo-package/api/src/
+demo-package/api/pyproject.toml
+demo-package/api/uv.lock
