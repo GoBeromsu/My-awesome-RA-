@@ -1,6 +1,8 @@
 """Vector index service using FAISS."""
 
+import logging
 import os
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -10,6 +12,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from src.services.embedding import EmbeddingService
+
+logger = logging.getLogger(__name__)
 
 
 class IndexService:
@@ -31,16 +35,54 @@ class IndexService:
         self._load_or_create_index()
 
     def _load_or_create_index(self) -> None:
-        """Load existing index or create new one."""
+        """Load existing index, seed index, or create new one."""
         index_file = self.index_path / "index.faiss"
         metadata_file = self.index_path / "metadata.npy"
 
+        # 1. Load existing local index if available
         if index_file.exists() and metadata_file.exists():
             self._index = faiss.read_index(str(index_file))
             self._metadata = list(np.load(str(metadata_file), allow_pickle=True))
-        else:
-            self._index = faiss.IndexFlatIP(self.dimension)
-            self._metadata = []
+            return
+
+        # 2. Load seed index for demo (copy from fixtures/seed/)
+        seed_dir = Path(os.getenv("SEED_INDEX_PATH", "fixtures/seed"))
+        seed_index = seed_dir / "index.faiss"
+        seed_metadata = seed_dir / "metadata.npy"
+
+        if seed_index.exists() and seed_metadata.exists():
+            # Copy seed files to local index path
+            shutil.copy(seed_index, index_file)
+            shutil.copy(seed_metadata, metadata_file)
+            self._index = faiss.read_index(str(index_file))
+            self._metadata = list(np.load(str(metadata_file), allow_pickle=True))
+
+            # Also copy seed PDFs to local storage
+            self._copy_seed_pdfs(seed_dir)
+            return
+
+        # 3. Create new empty index
+        self._index = faiss.IndexFlatIP(self.dimension)
+        self._metadata = []
+
+    def _copy_seed_pdfs(self, seed_dir: Path) -> None:
+        """Copy PDFs from seed directory to local storage."""
+        seed_pdfs_dir = seed_dir / "pdfs"
+        if not seed_pdfs_dir.exists():
+            return
+
+        pdf_storage_path = Path(os.getenv("PDF_STORAGE_PATH", "data/pdfs"))
+        pdf_storage_path.mkdir(parents=True, exist_ok=True)
+
+        copied = 0
+        for pdf in seed_pdfs_dir.glob("*.pdf"):
+            target = pdf_storage_path / pdf.name
+            if not target.exists():
+                shutil.copy(pdf, target)
+                copied += 1
+
+        if copied > 0:
+            logger.info(f"Copied {copied} PDFs from seed to {pdf_storage_path}")
 
     def _save_index(self) -> None:
         """Save index to disk."""
@@ -109,14 +151,15 @@ class IndexService:
 
         chunks = self._chunk_text(content)
         texts = [c["text"] for c in chunks]
+        total_chars = len(content)
 
         embeddings = await self._embedding_service.embed_documents(texts)
 
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             chunk_id = f"{document_id}_{i}"
 
-            # Find grounding info for this chunk
-            chunk_grounding = self._find_grounding_for_chunk(chunk, grounding)
+            # Find grounding info for this chunk using position-based estimation
+            chunk_grounding = self._find_grounding_for_chunk(chunk, grounding, total_chars)
 
             # Normalize for cosine similarity
             normalized = embedding / np.linalg.norm(embedding)
@@ -141,18 +184,21 @@ class IndexService:
         }
 
     def _find_grounding_for_chunk(
-        self, chunk: dict[str, Any], grounding: dict[str, Any] | None
+        self,
+        chunk: dict[str, Any],
+        grounding: dict[str, Any] | None,
+        total_chars: int = 0,
     ) -> dict[str, Any]:
         """
         Find the grounding info (page, bbox) for a text chunk.
 
-        For MVP, we estimate based on chunk position within the document.
-        SOLAR grounding maps element_ids to page/box, but we don't have
-        direct element_id to text mapping, so we use position heuristics.
+        Uses character position to estimate page number based on the
+        proportional position of the chunk within the document.
 
         Args:
             chunk: Chunk dict with start_idx, end_idx, text.
             grounding: SOLAR grounding dict mapping element_id to page/box.
+            total_chars: Total character count of the document.
 
         Returns:
             Dict with 'page' and optionally 'box' keys.
@@ -160,34 +206,29 @@ class IndexService:
         if not grounding:
             return {"page": 1}
 
-        # For MVP: estimate page from position
-        # Get total pages from grounding info
-        pages = set()
-        for element_id, info in grounding.items():
-            if isinstance(info, dict) and "page" in info:
-                pages.add(info["page"])
+        # Get sorted pages from grounding info
+        pages = sorted({
+            info["page"]
+            for info in grounding.values()
+            if isinstance(info, dict) and "page" in info
+        })
 
-        total_pages = max(pages) if pages else 1
+        if not pages:
+            return {"page": 1}
 
-        # Simple heuristic: map chunk position to page number
-        # This is a rough approximation - for better accuracy,
-        # we'd need to parse HTML and map text spans to element_ids
+        total_pages = max(pages)
+
         if total_pages == 1:
             return {"page": 1}
 
-        # Get all grounding entries sorted by page
-        sorted_entries = sorted(
-            [(k, v) for k, v in grounding.items() if isinstance(v, dict) and "page" in v],
-            key=lambda x: x[1].get("page", 1),
-        )
+        # Estimate page based on character position ratio
+        if total_chars > 0:
+            chunk_midpoint = (chunk["start_idx"] + chunk["end_idx"]) / 2
+            position_ratio = chunk_midpoint / total_chars
+            estimated_page = int(position_ratio * total_pages) + 1
+            return {"page": min(estimated_page, total_pages)}
 
-        if not sorted_entries:
-            return {"page": 1}
-
-        # Estimate based on chunk text position
-        # For now, return first page as default
-        # TODO: Implement more sophisticated text-to-element matching
-        return {"page": sorted_entries[0][1].get("page", 1)}
+        return {"page": 1}
 
     async def search(
         self,
