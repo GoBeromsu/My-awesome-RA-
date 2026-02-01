@@ -93,74 +93,79 @@ My Awesome RA는 다음 질문에 즉시 답하는 것을 목표로 합니다.
 
 ### Evidence Panel Flow
 
+"이 주장에 맞는 근거가 뭐였지?"를 **PDF 수동 탐색 없이** 해결합니다.
+문단을 쓰는 즉시 **관련 청크 + 페이지 정보**를 패널에서 미리보기로 제공합니다.
+
 ```mermaid
 sequenceDiagram
-    participant User as User (LaTeX Editor)
-    participant EP as Evidence Panel
-    participant API as FastAPI Backend
-    participant Solar as Upstage SOLAR
-    participant DB as ChromaDB
+    participant U as 사용자(Overleaf Editor)
+    participant CM as CodeMirror Extension
+    participant EC as EvidenceContext(UI State)
+    participant API as Backend /evidence/search
+    participant EMB as SOLAR Embeddings
+    participant VDB as Vector DB(ChromaDB)
 
-    User->>EP: 문단 작성 (커서 이동)
-    EP->>EP: 500ms 디바운스
-    EP->>API: POST /evidence/search
-    API->>Solar: Embed query (4096-dim)
-    Solar-->>API: Query embedding
-    API->>DB: Similarity search (top-k)
-    DB-->>API: Relevant chunks
-    API-->>EP: Evidence results + scores
-    EP-->>User: 관련 근거 표시 (relevance %)
+    U->>CM: 커서 이동/문단 편집
+    CM->>CM: 현재 문단 추출
+    CM->>EC: paragraph-change 이벤트 발행
+    Note over EC: debounce(500ms) + 동일 문단 캐시 체크
+
+    EC->>API: POST { query: paragraph_text, project_id }
+    API->>EMB: query 임베딩 생성
+    EMB-->>API: query_vector
+    API->>VDB: similarity_search(top_k)
+    VDB-->>API: chunks[{text, doc_id, page, score, bib_key}]
+    API-->>EC: 결과 반환
+    EC-->>U: Evidence Panel에 스니펫/페이지 표시
+
+    U->>EC: 결과 클릭(Preview/Cite)
+    EC->>U: PDF 프리뷰 점프 또는 인용 삽입
 ```
 
 ### Chat Panel Flow (RAG Q&A)
 
+"이 참고문헌에서 방법론이 뭐였지?" 같은 질문을 **근거 기반으로 답변**합니다.
+답변에 **출처 (청크/페이지)**를 함께 제공하여 검증 가능하게 유지합니다.
+
 ```mermaid
 sequenceDiagram
-    participant User as User
-    participant Chat as Chat Panel
-    participant API as FastAPI Backend
-    participant Solar as Upstage SOLAR
-    participant DB as ChromaDB
+    participant U as 사용자(Chat Panel)
+    participant CC as ChatContext(UI State)
+    participant API as Backend /chat/ask
+    participant EMB as SOLAR Embeddings
+    participant VDB as Vector DB(ChromaDB)
+    participant LLM as SOLAR Chat(Completions)
 
-    User->>Chat: "내 논문 어때?"
-    Chat->>API: POST /chat/ask
-    API->>Solar: Embed question
-    Solar-->>API: Question embedding
-    API->>DB: Retrieve relevant context
-    DB-->>API: Top-k chunks
-    API->>Solar: Chat completion (solar-pro)
-    Note over API,Solar: System prompt + context + question
-    Solar-->>API: AI response with citations
-    API-->>Chat: Formatted answer
-    Chat-->>User: 답변 + 출처 표시
+    U->>CC: 질문 입력/전송
+    CC->>CC: (선택) 현재 LaTeX 문서/선택 영역 수집
+    CC->>API: POST { question, document_context?, project_id }
+
+    Note over API: Step 1) Retrieval
+    API->>EMB: question 임베딩
+    EMB-->>API: q_vector
+    API->>VDB: similarity_search(top_k)
+    VDB-->>API: evidence_chunks[{text, page, title, bib_key}]
+
+    Note over API: Step 2) Prompt Assembly
+    API->>API: system + question + document_context + evidence_chunks 구성
+
+    Note over API: Step 3) Generation
+    API->>LLM: chat completion 요청
+    LLM-->>API: answer
+
+    API-->>CC: { answer, sources:[...] }
+    CC-->>U: 답변 + 출처 UI 렌더링
 ```
 
-### Reference Library Flow
+### Evidence Panel vs Chat Panel
 
-```mermaid
-flowchart LR
-    subgraph Upload["PDF Upload"]
-        A[.bib 파일] --> B[Reference Library]
-        C[PDF 파일] --> D[Upload Button]
-    end
+| 구분 | Evidence Panel | Chat Panel |
+|------|----------------|------------|
+| **트리거** | 문단 이벤트 (자동) | 사용자 질문 (수동) |
+| **목적** | 근거 후보 빠르게 제시 → 인용 삽입 | 근거 기반 요약/설명/비교 |
+| **출력** | 근거 리스트 (스니펫 + 페이지) | 답변 + 출처 |
 
-    subgraph Process["Processing"]
-        D --> E[SOLAR Document Parse]
-        E --> F[Text Chunking]
-        F --> G[SOLAR Embedding]
-    end
-
-    subgraph Store["Storage"]
-        G --> H[(ChromaDB)]
-        B --> I[BibTeX Metadata]
-    end
-
-    subgraph Query["Query"]
-        H --> J[Evidence Search]
-        H --> K[Chat RAG]
-        I --> J
-    end
-```
+두 패널은 같은 인덱스(참고문헌 PDF → 청킹 → 임베딩 → Vector DB)를 공유합니다.
 
 ---
 
