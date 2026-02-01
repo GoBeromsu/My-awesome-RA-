@@ -290,13 +290,58 @@ createDemoProject().catch(err => {
 });
 \"" 2>&1 | tee /dev/stderr | tail -1)
 
-# Clean up temp files (ignore errors)
-docker exec $CONTAINER_NAME rm -rf /tmp/demo-latex 2>/dev/null || true
-
 if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "undefined" ]; then
     echo -e "${RED}Error: Failed to create demo project${NC}"
+    docker exec $CONTAINER_NAME rm -rf /tmp/demo-latex 2>/dev/null || true
     exit 1
 fi
+
+# Step 4: Upload images via HTTP API
+echo
+echo -e "${YELLOW}Step 4: Uploading images via HTTP API...${NC}"
+
+# Get root folder ID
+ROOT_FOLDER_ID=$(docker exec $CONTAINER_NAME sh -c "cd /overleaf/services/web && node --input-type=module -e \"
+import { db } from './app/src/infrastructure/mongodb.mjs';
+import mongodb from 'mongodb-legacy';
+const { ObjectId } = mongodb;
+
+const project = await db.projects.findOne({ _id: new ObjectId('$PROJECT_ID') });
+console.log(project.rootFolder[0]._id.toString());
+process.exit(0);
+\"" 2>/dev/null)
+
+# Upload images via HTTP API inside container
+docker exec $CONTAINER_NAME sh -c "
+COOKIE_FILE='/tmp/overleaf-cookie'
+
+# Login to get session
+curl -s -c \$COOKIE_FILE -b \$COOKIE_FILE \\
+    -X POST http://localhost:3000/login \\
+    -H 'Content-Type: application/json' \\
+    -d '{\"email\":\"$DEMO_EMAIL\",\"password\":\"$DEMO_PASSWORD\"}' >/dev/null
+
+# Upload each image
+for IMG in /tmp/demo-latex/*.png /tmp/demo-latex/*.jpg /tmp/demo-latex/*.jpeg 2>/dev/null; do
+    if [ -f \"\$IMG\" ]; then
+        IMG_NAME=\$(basename \"\$IMG\")
+        RESULT=\$(curl -s -b \$COOKIE_FILE \\
+            -X POST \"http://localhost:3000/project/$PROJECT_ID/upload?folder_id=$ROOT_FOLDER_ID\" \\
+            -F \"name=\$IMG_NAME\" \\
+            -F \"qqfile=@\$IMG;filename=\$IMG_NAME\" 2>&1)
+        if echo \"\$RESULT\" | grep -q 'entity_id'; then
+            echo \"  Uploaded: \$IMG_NAME\"
+        else
+            echo \"  Warning: Could not upload \$IMG_NAME\"
+        fi
+    fi
+done
+
+rm -f \$COOKIE_FILE
+"
+
+# Cleanup temp files
+docker exec $CONTAINER_NAME rm -rf /tmp/demo-latex 2>/dev/null || true
 
 echo
 echo -e "${GREEN}=================================="
