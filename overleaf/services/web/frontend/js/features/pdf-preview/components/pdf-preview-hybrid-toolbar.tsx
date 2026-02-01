@@ -11,17 +11,22 @@ import PdfOrphanRefreshButton from './pdf-orphan-refresh-button'
 import { DetachedSynctexControl } from './detach-synctex-control'
 import LoadingSpinner from '@/shared/components/loading-spinner'
 import EvidenceToggleButton from '@modules/evidence-panel/frontend/js/components/evidence-toggle-button'
+import AnalyzeToggleButton from '@modules/evidence-panel/frontend/js/components/analyze-toggle-button'
 
 const ORPHAN_UI_TIMEOUT_MS = 5000
 
 interface PdfPreviewHybridToolbarProps {
   showEvidence?: boolean
   onToggleEvidence?: () => void
+  showAnalyze?: boolean
+  onToggleAnalyze?: () => void
 }
 
 function PdfPreviewHybridToolbar({
   showEvidence = false,
   onToggleEvidence,
+  showAnalyze = false,
+  onToggleAnalyze,
 }: PdfPreviewHybridToolbarProps) {
   const { detachRole, detachIsLinked } = useLayoutContext()
   const { t } = useTranslation()
@@ -56,6 +61,8 @@ function PdfPreviewHybridToolbar({
       <PdfPreviewHybridToolbarInner
         showEvidence={showEvidence}
         onToggleEvidence={onToggleEvidence}
+        showAnalyze={showAnalyze}
+        onToggleAnalyze={onToggleAnalyze}
       />
     )
   }
@@ -73,11 +80,15 @@ function PdfPreviewHybridToolbar({
 interface PdfPreviewHybridToolbarInnerProps {
   showEvidence?: boolean
   onToggleEvidence?: () => void
+  showAnalyze?: boolean
+  onToggleAnalyze?: () => void
 }
 
 function PdfPreviewHybridToolbarInner({
   showEvidence = false,
   onToggleEvidence,
+  showAnalyze = false,
+  onToggleAnalyze,
 }: PdfPreviewHybridToolbarInnerProps) {
   const { t } = useTranslation()
 
@@ -91,6 +102,12 @@ function PdfPreviewHybridToolbarInner({
           <EvidenceToggleButton
             showEvidence={showEvidence}
             onToggle={onToggleEvidence}
+          />
+        )}
+        {onToggleAnalyze && (
+          <AnalyzeToggleButton
+            showAnalyze={showAnalyze}
+            onToggle={onToggleAnalyze}
           />
         )}
       </div>

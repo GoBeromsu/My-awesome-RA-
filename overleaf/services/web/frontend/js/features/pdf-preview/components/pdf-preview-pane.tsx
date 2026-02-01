@@ -16,11 +16,16 @@ import getMeta from '@/utils/meta'
 import NewPdfLogsViewer from '@/features/ide-redesign/components/pdf-preview/pdf-logs-viewer'
 import { EVIDENCE_SHOW_EVENT } from '@modules/evidence-panel/frontend/js/constants/events'
 
-// Lazy load EvidenceViewer for code splitting
-const EvidenceViewer = lazy(() =>
-  import('@modules/evidence-panel/frontend/js/components/evidence-viewer').then(
-    module => ({ default: module.EvidenceViewer })
+// Lazy load EvidencePanel for code splitting
+const EvidencePanel = lazy(() =>
+  import('@modules/evidence-panel/frontend/js/components/evidence-panel').then(
+    module => ({ default: module.EvidencePanel })
   )
+)
+
+// Lazy load ChatTab for code splitting (replaces FeedbackPanel)
+const ChatTab = lazy(() =>
+  import('@modules/evidence-panel/frontend/js/components/chat-tab')
 )
 
 function PdfPreviewPane() {
@@ -38,13 +43,15 @@ function PdfPreviewPane() {
     activeOverallTheme === 'dark' &&
     darkModeSetting
 
-  // Evidence view toggle state
+  // Panel view toggle states (mutually exclusive)
   const [showEvidence, setShowEvidence] = useState(false)
+  const [showAnalyze, setShowAnalyze] = useState(false)
 
   // Auto-switch to Evidence view when paragraph is selected
   useEffect(() => {
     const handleShowEvidence = () => {
       setShowEvidence(true)
+      setShowAnalyze(false) // Close Analyze when Evidence is triggered
     }
     window.addEventListener(EVIDENCE_SHOW_EVENT, handleShowEvidence)
     return () => {
@@ -52,9 +59,19 @@ function PdfPreviewPane() {
     }
   }, [])
 
-  // Manual toggle callback for toolbar button
+  // Manual toggle callback for toolbar button (mutual exclusivity)
   const toggleEvidence = useCallback(() => {
-    setShowEvidence(prev => !prev)
+    setShowEvidence(prev => {
+      if (!prev) setShowAnalyze(false) // Close Analyze when opening Evidence
+      return !prev
+    })
+  }, [])
+
+  const toggleAnalyze = useCallback(() => {
+    setShowAnalyze(prev => {
+      if (!prev) setShowEvidence(false) // Close Evidence when opening Analyze
+      return !prev
+    })
   }, [])
 
   const classes = classNames('pdf', 'full-size', {
@@ -75,11 +92,15 @@ function PdfPreviewPane() {
           <PdfPreviewHybridToolbarNew
             showEvidence={showEvidence}
             onToggleEvidence={toggleEvidence}
+            showAnalyze={showAnalyze}
+            onToggleAnalyze={toggleAnalyze}
           />
         ) : (
           <PdfHybridPreviewToolbar
             showEvidence={showEvidence}
             onToggleEvidence={toggleEvidence}
+            showAnalyze={showAnalyze}
+            onToggleAnalyze={toggleAnalyze}
           />
         )}
         {newEditor && <PdfCodeCheckFailedBanner />}
@@ -89,8 +110,14 @@ function PdfPreviewPane() {
 
         {showEvidence ? (
           <Suspense fallback={<FullSizeLoadingSpinner delay={500} />}>
-            <div className="evidence-viewer-container" data-testid="evidence-viewer">
-              <EvidenceViewer />
+            <div className="evidence-viewer-container" data-testid="evidence-panel">
+              <EvidencePanel />
+            </div>
+          </Suspense>
+        ) : showAnalyze ? (
+          <Suspense fallback={<FullSizeLoadingSpinner delay={500} />}>
+            <div className="evidence-viewer-container" data-testid="chat-panel">
+              <ChatTab />
             </div>
           </Suspense>
         ) : (

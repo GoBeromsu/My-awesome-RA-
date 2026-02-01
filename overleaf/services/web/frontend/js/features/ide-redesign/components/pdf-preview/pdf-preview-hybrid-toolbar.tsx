@@ -8,15 +8,20 @@ import SwitchToEditorButton from '@/features/pdf-preview/components/switch-to-ed
 import PdfHybridLogsButton from '@/features/pdf-preview/components/pdf-hybrid-logs-button'
 import EditorTourLogsTooltip from '../editor-tour/editor-tour-logs-tooltip'
 import EvidenceToggleButton from '@modules/evidence-panel/frontend/js/components/evidence-toggle-button'
+import AnalyzeToggleButton from '@modules/evidence-panel/frontend/js/components/analyze-toggle-button'
 
 interface PdfPreviewHybridToolbarProps {
   showEvidence?: boolean
   onToggleEvidence?: () => void
+  showAnalyze?: boolean
+  onToggleAnalyze?: () => void
 }
 
 function PdfPreviewHybridToolbar({
   showEvidence = false,
   onToggleEvidence,
+  showAnalyze = false,
+  onToggleAnalyze,
 }: PdfPreviewHybridToolbarProps) {
   const { t } = useTranslation()
 
@@ -42,6 +47,13 @@ function PdfPreviewHybridToolbar({
             showEvidence={showEvidence}
             onToggle={onToggleEvidence}
             tooltipId="toggle-evidence-tooltip-new"
+          />
+        )}
+        {onToggleAnalyze && (
+          <AnalyzeToggleButton
+            showAnalyze={showAnalyze}
+            onToggle={onToggleAnalyze}
+            tooltipId="toggle-analyze-tooltip-new"
           />
         )}
         <EditorTourLogsTooltip target={logsButtonElt} />
