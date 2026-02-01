@@ -1,10 +1,6 @@
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
-import {
-  MIN_PARAGRAPH_LENGTH_FOR_SEARCH,
-  MAX_PARAGRAPH_LENGTH_FOR_SEARCH,
-  PARAGRAPH_CHANGE_DEBOUNCE_MS,
-} from '@modules/evidence-panel/frontend/js/constants/search'
+import { PARAGRAPH_CHANGE_DEBOUNCE_MS } from '@modules/evidence-panel/frontend/js/constants/search'
 
 /**
  * Event name for paragraph change events
@@ -195,22 +191,17 @@ export const evidenceTracker = ViewPlugin.fromClass(
       const rawParagraph = getCurrentParagraph(this.view.state)
       const cleanedParagraph = cleanLatexForSearch(rawParagraph)
 
-      // Skip if paragraph is too short, too long, or hasn't changed
-      if (
-        cleanedParagraph.length < MIN_PARAGRAPH_LENGTH_FOR_SEARCH ||
-        cleanedParagraph.length > MAX_PARAGRAPH_LENGTH_FOR_SEARCH
-      ) {
+      // Skip if paragraph is blank or hasn't changed
+      if (!cleanedParagraph || cleanedParagraph === this.lastParagraph) {
         return
       }
 
-      if (cleanedParagraph !== this.lastParagraph) {
-        this.lastParagraph = cleanedParagraph
-        dispatchParagraphChange(
-          this.view,
-          cleanedParagraph,
-          this.view.state.selection.main.head
-        )
-      }
+      this.lastParagraph = cleanedParagraph
+      dispatchParagraphChange(
+        this.view,
+        cleanedParagraph,
+        this.view.state.selection.main.head
+      )
     }
 
     destroy() {
