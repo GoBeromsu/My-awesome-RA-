@@ -12,7 +12,7 @@ class EvidenceSearchRequest(BaseModel):
     project_id: str | None = Field(
         default=None, description="Optional project ID to scope the search"
     )
-    top_k: int = Field(default=10, ge=1, le=50, description="Number of results to return")
+    top_k: int = Field(default=10, ge=1, le=20, description="Number of results to return")
     threshold: float = Field(
         default=0.3, ge=0.0, le=1.0, description="Minimum similarity threshold"
     )
