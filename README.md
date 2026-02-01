@@ -11,73 +11,43 @@ Overleaf Community Edition(CE)을 포크하여, 에디터 내부에서 **근거 
 ## System Overview
 
 ```mermaid
-flowchart TB
-    subgraph User["👤 사용자"]
-        Write["✍️ 논문 작성"]
-        Ask["❓ 질문하기"]
-        Upload["📄 PDF 업로드"]
-    end
-
-    subgraph Overleaf["🖥️ Overleaf Editor"]
-        Editor["📝 LaTeX Editor"]
-
-        subgraph Panels["AI 패널"]
-            Evidence["🔍 Evidence Panel<br/><i>근거 자동 추천</i>"]
-            Chat["💬 Chat Panel<br/><i>RAG 질의응답</i>"]
-            RefLib["📚 Reference Library<br/><i>참고문헌 관리</i>"]
+flowchart LR
+    subgraph Overleaf["Overleaf Editor"]
+        Editor["LaTeX Editor"]
+        subgraph Panels["AI Panels"]
+            Evidence["Evidence Panel"]
+            Chat["Chat Panel"]
+            RefLib["Reference Library"]
         end
     end
 
-    subgraph Backend["⚙️ Backend Server"]
-        API["🚀 FastAPI"]
+    subgraph Backend["Backend"]
+        API["FastAPI Server"]
     end
 
-    subgraph AI["🤖 Upstage SOLAR API"]
-        Embed["🧠 Embeddings<br/><i>의미 벡터 변환</i>"]
-        Parse["📖 Document Parse<br/><i>PDF 텍스트 추출</i>"]
-        LLM["💡 Chat Completions<br/><i>AI 답변 생성</i>"]
+    subgraph Upstage["Upstage SOLAR API"]
+        Solar["Embeddings / Parse / Chat"]
     end
 
-    subgraph Storage["💾 Vector Database"]
-        Chroma[("🗄️ ChromaDB<br/><i>근거 청크 저장</i>")]
+    subgraph Storage["Storage"]
+        Chroma[("ChromaDB")]
     end
 
-    %% User interactions
-    Write --> Editor
-    Ask --> Chat
-    Upload --> RefLib
+    Editor <--> Evidence & Chat & RefLib
+    Panels --> API
+    API <--> Solar
+    API <--> Chroma
 
-    %% Editor to Panels
-    Editor <--> Evidence
-    Editor <--> Chat
-    Editor <--> RefLib
-
-    %% Panels to Backend
-    Evidence --> API
-    Chat --> API
-    RefLib --> API
-
-    %% Backend to AI Services
-    API <--> Embed
-    API <--> Parse
-    API <--> LLM
-
-    %% Storage connections
-    Embed <--> Chroma
-    Parse --> Chroma
-
-    %% Styling
-    style Overleaf fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    style AI fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    style Storage fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
-    style Panels fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Overleaf fill:#e8f5e9,stroke:#2e7d32
+    style Upstage fill:#e3f2fd,stroke:#1565c0
+    style Storage fill:#fff3e0,stroke:#ef6c00
 ```
 
-| 기능 | 사용자 액션 | AI 처리 | 결과 |
-|------|------------|---------|------|
-| **Evidence Panel** | 문단 작성 | 의미 검색 → 유사 근거 탐색 | 관련 논문 구절 + 페이지 표시 |
-| **Chat Panel** | 질문 입력 | RAG (검색 + 생성) | 근거 기반 답변 + 출처 |
-| **Reference Library** | PDF 업로드 | 파싱 → 청킹 → 임베딩 | 검색 가능한 벡터 저장 |
+| 패널 | 트리거 | Upstage API | 결과 |
+|------|--------|-------------|------|
+| **Evidence Panel** | 문단 작성 | Embeddings → 유사도 검색 | 관련 근거 + 페이지 |
+| **Chat Panel** | 질문 입력 | Embeddings + Chat | RAG 답변 + 출처 |
+| **Reference Library** | PDF 업로드 | Document Parse | 벡터 인덱싱 |
 
 ---
 
