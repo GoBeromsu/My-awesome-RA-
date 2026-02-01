@@ -1,15 +1,15 @@
 # My Awesome RA - One-Command Demo Setup
 # Usage: cd deployment && docker compose up --build
 #
-# Uses overlay build: official sharelatex image + evidence-panel module only
-# Build time: ~5-7 min (vs ~15 min for full Overleaf build)
+# Full Overleaf build with all Evidence Panel modifications
+# Build time: ~15 min (first build), cached rebuilds much faster
 
 services:
-  # Overleaf CE with Evidence Panel (overlay build)
+  # Overleaf CE with Evidence Panel (full build)
   overleaf-web:
     build:
       context: ../overleaf
-      dockerfile: ../deployment/Dockerfile.overleaf
+      dockerfile: server-ce/Dockerfile
     container_name: overleaf-web
     ports:
       - "80:80"
