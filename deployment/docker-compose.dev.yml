@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ra-api:
     build:
@@ -7,15 +5,26 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - ../.env
     environment:
       - UPSTAGE_API_KEY=${UPSTAGE_API_KEY}
-      - VECTOR_STORE_PATH=/data/faiss
+      - VECTOR_STORE_PATH=/data/chroma
+      - PDF_STORAGE_PATH=/data/pdfs
       - DATABASE_PATH=/data/my_awesome_ra.db
       - LOG_LEVEL=DEBUG
+      - RESET_TO_SEED=true
+      - SEED_INDEX_PATH=/seed
     volumes:
       - ../apps/api/src:/app/src:ro
       - ../data:/data
+      - ../fixtures/seed:/seed:ro
     command: ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - dev-network
 
@@ -47,6 +56,13 @@ services:
     volumes:
       - sharelatex_data:/var/lib/sharelatex
       - ../overleaf/services/web/modules/evidence-panel:/overleaf/services/web/modules/evidence-panel:ro
+      - ../fixtures/latex:/fixtures/latex:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/project"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     networks:
       - dev-network
 
@@ -82,6 +98,25 @@ services:
       - dev-network
     profiles:
       - dev
+
+  # Demo initialization service
+  demo-init:
+    image: docker:cli
+    container_name: demo-init
+    depends_on:
+      sharelatex:
+        condition: service_healthy
+    volumes:
+      - ../scripts/setup-demo.sh:/setup-demo.sh:ro
+      - ../fixtures/latex:/fixtures/latex:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint: ["/bin/sh", "-c", "chmod +x /setup-demo.sh && /setup-demo.sh"]
+    environment:
+      - CONTAINER_NAME=sharelatex
+    networks:
+      - dev-network
+    profiles:
+      - demo
 
 volumes:
   sharelatex_data:

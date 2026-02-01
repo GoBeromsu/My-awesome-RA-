@@ -14,7 +14,7 @@
 | Feature | Description | Status |
 |---------|-------------|--------|
 | **Reference Library** | .bib 파일 기반 참고문헌 목록 관리 | ✅ 완료 |
-| **PDF Upload & Index** | PDF 업로드 → SOLAR 파싱 → FAISS 인덱싱 | ✅ 완료 |
+| **PDF Upload & Index** | PDF 업로드 → SOLAR 파싱 → ChromaDB 인덱싱 | ✅ 완료 |
 | **Evidence Search** | 현재 문단 기반 관련 근거 자동 검색 | ✅ 완료 |
 | **Overleaf Integration** | Rail Panel로 통합된 UI | ✅ 완료 |
 
@@ -24,7 +24,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                        Overleaf CE                          │
 │  ┌──────────────────┐    ┌────────────────────────────┐    │
-│  │   LaTeX Editor   │    │    References Panel        │    │
+│  │   LaTeX Editor   │    │    Evidence Panel          │    │
 │  │  (CodeMirror)    │───▶│  - .bib 파일 파싱          │    │
 │  │                  │    │  - PDF 업로드/인덱싱       │    │
 │  └──────────────────┘    │  - Evidence 검색           │    │
@@ -42,13 +42,13 @@
 │         ▼                 ▼                 ▼               │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │              Upstage SOLAR API                      │   │
-│  │  • Embedding (solar-embedding-1-large)              │   │
+│  │  • Embedding (solar-embedding-1-large, 4096-dim)    │   │
 │  │  • Document Parse                                   │   │
 │  └─────────────────────────────────────────────────────┘   │
 │         │                                                   │
 │         ▼                                                   │
 │  ┌──────────────┐                                          │
-│  │ FAISS Index  │  (1024-dim vectors)                      │
+│  │  ChromaDB    │  (persistent vector store)               │
 │  └──────────────┘                                          │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -56,12 +56,10 @@
 ## Quick Start
 
 ### Prerequisites
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) (패키지 매니저)
 - Docker & Docker Compose
 - [Upstage API Key](https://console.upstage.ai/)
 
-### 1. Setup
+### One-Command Demo (Recommended)
 
 ```bash
 # Clone
@@ -70,44 +68,37 @@ cd my-awesome-ra
 
 # Environment
 cp .env.example .env
-# .env 파일에 UPSTAGE_API_KEY 설정
+# Edit .env and set UPSTAGE_API_KEY
 
-# Install dependencies
-cd apps/api && uv sync
-```
+# Start demo (auto-initializes everything)
+cd deployment && docker compose --profile demo up
 
-### 2. Run Overleaf (with Evidence Panel)
-
-```bash
-# Build & Start
-cd overleaf/develop
-bin/build
-bin/dev web webpack
-
-# Access: http://localhost:80
+# Access: http://localhost
 # Login: demo@example.com / Demo@2024!Secure
 ```
 
-### 3. Run API Server
+### Development Mode
 
 ```bash
-cd apps/api
-uv run uvicorn src.main:app --reload --port 8080
+# With webpack hot reload
+cd deployment && docker compose --profile dev up
+
+# Access: http://localhost (Overleaf)
+# API: http://localhost:8000 (FastAPI)
+# Webpack: http://localhost:3808
 ```
 
-## Upstage SOLAR API 활용
+### Manual Setup (Advanced)
 
-### 1. Embedding API
-```python
-# 문단/청크 임베딩 생성 (1024차원)
-embedding = await embedding_service.embed_query("The transformer architecture...")
-```
+```bash
+# Install API dependencies
+cd apps/api && uv sync
 
-### 2. Document Parse API
-```python
-# PDF에서 텍스트 + 위치 정보 추출
-result = await solar_service.parse_document(pdf_bytes, "paper.pdf")
-# → {"pages": 10, "content": "...", "grounding": {...}}
+# Run API server
+uv run uvicorn src.main:app --reload --port 8000
+
+# Run Overleaf (in another terminal)
+cd overleaf/develop && bin/dev web webpack
 ```
 
 ## API Endpoints
@@ -116,10 +107,10 @@ result = await solar_service.parse_document(pdf_bytes, "paper.pdf")
 |--------|----------|-------------|
 | `GET` | `/health` | Health check |
 | `GET` | `/documents` | List indexed documents |
-| `POST` | `/documents/upload` | Upload & index PDF |
-| `POST` | `/documents/{id}/reindex` | Re-index document |
+| `POST` | `/documents/parse` | Parse PDF (SOLAR API) |
+| `POST` | `/documents/index` | Index to ChromaDB |
+| `GET` | `/documents/{id}/chunks` | Get document chunks |
 | `DELETE` | `/documents/{id}` | Remove from index |
-| `GET` | `/documents/{id}/file` | Serve PDF file |
 | `POST` | `/evidence/search` | Search evidence by query |
 
 ## Project Structure
@@ -129,7 +120,7 @@ my-awesome-ra/
 ├── apps/api/                      # FastAPI Backend
 │   └── src/
 │       ├── routers/               # API endpoints
-│       ├── services/              # SOLAR, FAISS, Embedding
+│       ├── services/              # SOLAR, ChromaDB, Embedding
 │       └── models/                # Pydantic schemas
 │
 ├── overleaf/                      # Forked Overleaf CE (submodule)
@@ -137,27 +128,37 @@ my-awesome-ra/
 │       └── evidence-panel/        # Evidence Panel Module
 │           ├── frontend/js/
 │           │   ├── components/    # React UI
-│           │   ├── context/       # State management
+│           │   ├── contexts/      # State management
 │           │   └── hooks/         # Custom hooks
 │           └── stylesheets/
 │
+├── deployment/                    # Docker Compose files
+│   └── docker-compose.dev.yml     # Development environment
+│
 ├── fixtures/
-│   ├── papers/                    # Sample PDFs
-│   └── seed/                      # Pre-built FAISS index
+│   ├── latex/                     # Demo LaTeX files
+│   └── seed/                      # Pre-built ChromaDB index (29 papers)
 │
 └── scripts/
-    └── index_fixtures.py          # Seed data indexer
+    ├── regenerate_seed.py         # Seed data regenerator
+    └── setup-demo.sh              # Demo user/project setup
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| **AI/ML** | Upstage SOLAR (Embedding, Document Parse) |
-| **Backend** | FastAPI, FAISS, Python 3.11 |
+| **AI/ML** | Upstage SOLAR (Embedding 4096-dim, Document Parse) |
+| **Backend** | FastAPI, ChromaDB, Python 3.11 |
 | **Frontend** | React 18, TypeScript, CodeMirror 6 |
 | **Editor** | Overleaf Community Edition |
-| **Infra** | Docker, uv |
+| **Infra** | Docker Compose, uv |
+
+## Credentials
+
+| Environment | Email | Password |
+|-------------|-------|----------|
+| Demo | `demo@example.com` | `Demo@2024!Secure` |
 
 ## License
 

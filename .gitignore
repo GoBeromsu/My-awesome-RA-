@@ -57,6 +57,7 @@ docker-compose.override.yml
 
 # Deployment secrets
 deployment/*.env
+deployment/.env
 deployment/overleaf-toolkit/config/overleaf.rc
 deployment/overleaf-toolkit/config/variables.env
 

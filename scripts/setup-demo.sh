@@ -5,7 +5,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-FIXTURES_DIR="$PROJECT_DIR/fixtures/latex"
+
+# Support both host machine (fixtures/latex) and container (/fixtures/latex) paths
+if [ -d "/fixtures/latex" ]; then
+    FIXTURES_DIR="/fixtures/latex"
+else
+    FIXTURES_DIR="$PROJECT_DIR/fixtures/latex"
+fi
+
+# Use environment variable or default to develop-web-1
+CONTAINER_NAME="${CONTAINER_NAME:-develop-web-1}"
 
 DEMO_EMAIL="demo@example.com"
 DEMO_PASSWORD="Demo@2024!Secure"
@@ -25,7 +34,7 @@ echo
 # Wait for web container to be ready
 echo -e "${YELLOW}Waiting for Overleaf web container...${NC}"
 for i in {1..30}; do
-    if docker exec develop-web-1 echo "ready" >/dev/null 2>&1; then
+    if docker exec $CONTAINER_NAME echo "ready" >/dev/null 2>&1; then
         echo -e "${GREEN}Container ready!${NC}"
         break
     fi
@@ -40,7 +49,7 @@ done
 echo
 echo -e "${YELLOW}Step 1: Creating demo user...${NC}"
 
-USER_ID=$(docker exec develop-web-1 sh -c "cd /overleaf/services/web && node --input-type=module -e \"
+USER_ID=$(docker exec $CONTAINER_NAME sh -c "cd /overleaf/services/web && node --input-type=module -e \"
 import { db } from './app/src/infrastructure/mongodb.mjs';
 import bcrypt from 'bcrypt';
 
@@ -99,7 +108,7 @@ echo -e "${GREEN}Demo user created with ID: $USER_ID${NC}"
 echo
 echo -e "${YELLOW}Step 2: Cleaning up existing demo projects...${NC}"
 
-docker exec develop-web-1 sh -c "cd /overleaf/services/web && node --input-type=module -e \"
+docker exec $CONTAINER_NAME sh -c "cd /overleaf/services/web && node --input-type=module -e \"
 import { db } from './app/src/infrastructure/mongodb.mjs';
 import mongodb from 'mongodb-legacy';
 const { ObjectId } = mongodb;
@@ -123,10 +132,10 @@ echo -e "${YELLOW}Step 3: Creating demo project...${NC}"
 
 # Copy fixtures to container
 echo "Copying LaTeX files to container..."
-docker cp "$FIXTURES_DIR/." develop-web-1:/tmp/demo-latex/
+docker cp "$FIXTURES_DIR/." $CONTAINER_NAME:/tmp/demo-latex/
 
 # Create project and add files
-PROJECT_ID=$(docker exec develop-web-1 sh -c "cd /overleaf/services/web && node --input-type=module -e \"
+PROJECT_ID=$(docker exec $CONTAINER_NAME sh -c "cd /overleaf/services/web && node --input-type=module -e \"
 import fs from 'node:fs';
 import path from 'node:path';
 import ProjectCreationHandler from './app/src/Features/Project/ProjectCreationHandler.mjs';
@@ -278,7 +287,7 @@ createDemoProject().catch(err => {
 \"" 2>&1 | tee /dev/stderr | tail -1)
 
 # Clean up temp files (ignore errors)
-docker exec develop-web-1 rm -rf /tmp/demo-latex 2>/dev/null || true
+docker exec $CONTAINER_NAME rm -rf /tmp/demo-latex 2>/dev/null || true
 
 if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "undefined" ]; then
     echo -e "${RED}Error: Failed to create demo project${NC}"

@@ -83,17 +83,22 @@ class IndexService:
     def _load_or_create_index(self) -> None:
         """Load existing index, seed index, or create new one."""
         chroma_db_file = self.index_path / "chroma.sqlite3"
+        seed_dir = Path(os.getenv("SEED_INDEX_PATH", "fixtures/seed"))
+        seed_chroma_db = seed_dir / "chroma.sqlite3"
+        reset_to_seed = os.getenv("RESET_TO_SEED", "false").lower() == "true"
 
-        # 1. Load existing local index if available
+        # 1. If RESET_TO_SEED=true and seed exists, always reset to seed state
+        if reset_to_seed and seed_chroma_db.exists():
+            self._reset_to_seed(seed_dir)
+            return
+
+        # 2. Load existing local index if available
         if chroma_db_file.exists():
             self._init_client_and_collection()
             logger.info(f"Loaded existing ChromaDB with {self._collection.count()} vectors")
             return
 
-        # 2. Load seed index for demo (copy from fixtures/seed/)
-        seed_dir = Path(os.getenv("SEED_INDEX_PATH", "fixtures/seed"))
-        seed_chroma_db = seed_dir / "chroma.sqlite3"
-
+        # 3. Load seed index for demo (copy from fixtures/seed/)
         if seed_chroma_db.exists():
             self._copy_seed_files(seed_dir)
             self._init_client_and_collection()
@@ -101,9 +106,33 @@ class IndexService:
             logger.info(f"Loaded seed ChromaDB with {self._collection.count()} vectors")
             return
 
-        # 3. Create new empty collection
+        # 4. Create new empty collection
         self._init_client_and_collection()
         logger.info("Created new empty ChromaDB collection")
+
+    def _reset_to_seed(self, seed_dir: Path) -> None:
+        """Reset index to seed state by clearing and copying from seed."""
+        logger.info("RESET_TO_SEED=true, resetting to seed state...")
+
+        # Clear existing data
+        if self.index_path.exists():
+            for item in self.index_path.iterdir():
+                if item.is_file():
+                    item.unlink()
+                elif item.is_dir():
+                    shutil.rmtree(item)
+
+        # Clear PDF storage
+        pdf_storage_path = Path(os.getenv("PDF_STORAGE_PATH", "data/pdfs"))
+        if pdf_storage_path.exists():
+            for pdf in pdf_storage_path.glob("*.pdf"):
+                pdf.unlink()
+
+        # Copy seed files
+        self._copy_seed_files(seed_dir)
+        self._init_client_and_collection()
+        self._copy_seed_pdfs(seed_dir)
+        logger.info(f"Reset to seed ChromaDB with {self._collection.count()} vectors")
 
     def _copy_seed_files(self, seed_dir: Path) -> None:
         """Copy ChromaDB files from seed directory to local index path."""

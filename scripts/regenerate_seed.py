@@ -100,6 +100,22 @@ def estimate_page(start: int, end: int, total_chars: int, total_pages: int) -> i
     return min(int(ratio * total_pages) + 1, total_pages)
 
 
+def extract_paper_metadata(cite_key: str, pdf_path: str) -> dict:
+    """Extract metadata from cite_key pattern: Author2024Title."""
+    match = re.match(r'^([A-Za-z\-]+)(\d{4})(.+)$', cite_key)
+    if match:
+        author = match.group(1)
+        year = int(match.group(2))
+        title = match.group(3)
+        return {
+            "title": title,
+            "authors": author,
+            "year": year,
+            "source_pdf": pdf_path,
+        }
+    return {"title": cite_key, "authors": "", "year": None, "source_pdf": pdf_path}
+
+
 async def process_pdf(
     pdf_path: Path,
     cite_key: str,
@@ -181,6 +197,7 @@ async def process_pdf(
             ids.append(f"{doc_id}_{idx}")
             embeddings.append((emb / np.linalg.norm(emb)).tolist())
             documents.append(chunk["text"])
+            paper_meta = extract_paper_metadata(cite_key, str(target))
             metadatas.append({
                 "document_id": doc_id,
                 "cite_key": cite_key,
@@ -189,6 +206,7 @@ async def process_pdf(
                 "page": estimate_page(chunk["start"], chunk["end"], total_chars, pages),
                 "page_count": pages,
                 "indexed_at": now,
+                **paper_meta,
             })
 
         upsert_with_retry(ids, embeddings, documents, metadatas)
