@@ -1,35 +1,33 @@
 # My Awesome RA
 
-> **AI Agent for Reference-Grounded LaTeX Paper Writing**
-> Powered by [Upstage SOLAR API](https://console.upstage.ai/)
+> **참고문헌 기반 LaTeX 논문 작성을 위한 AI 에이전트**
+> [Upstage SOLAR API](https://console.upstage.ai/) 기반
 
 **My Awesome RA**는 논문 작성 중 *현재 작성 중인 문단*에 맞는 참고문헌 근거를 자동으로 찾아주는 **Evidence Panel 기반 AI Agent**입니다.
 Overleaf Community Edition(CE)을 포크하여, 에디터 내부에서 **근거 탐색 → 확인 → 인용**까지 한 흐름으로 수행할 수 있도록 설계되었습니다.
 
----
-
-## System Overview
+## 시스템 개요
 
 ```mermaid
 flowchart LR
-    subgraph Overleaf["Overleaf Editor"]
-        Editor["LaTeX Editor"]
-        subgraph Panels["AI Panels"]
+    subgraph Overleaf["Overleaf 에디터"]
+        Editor["LaTeX 에디터"]
+        subgraph Panels["AI 패널"]
             Evidence["Evidence Panel"]
             Chat["Chat Panel"]
             RefLib["Reference Library"]
         end
     end
 
-    subgraph Backend["Backend"]
-        API["FastAPI Server"]
+    subgraph Backend["백엔드"]
+        API["FastAPI 서버"]
     end
 
     subgraph Upstage["Upstage SOLAR API"]
         Solar["Embeddings / Parse / Chat"]
     end
 
-    subgraph Storage["Storage"]
+    subgraph Storage["저장소"]
         Chroma[("ChromaDB")]
     end
 
@@ -49,155 +47,142 @@ flowchart LR
 | **Chat Panel** | 질문 입력 | Embeddings + Chat | RAG 답변 + 출처 |
 | **Reference Library** | PDF 업로드 | Document Parse | 벡터 인덱싱 |
 
----
-
-## Why My Awesome RA?
+## 왜 My Awesome RA인가?
 
 논문 작성 과정에서 가장 자주 흐름이 끊기는 지점은 **근거를 찾고 검증하는 순간**입니다.
 My Awesome RA는 다음 질문에 즉시 답하는 것을 목표로 합니다.
 
-* *“이 문장을 뒷받침하는 근거가 뭐였지?”*
-* *“어디 페이지를 인용한 거지?”*
-* *“에디터를 벗어나지 않고 확인할 수 없을까?”*
+* *"이 문장을 뒷받침하는 근거가 뭐였지?"*
+* *"어디 페이지를 인용한 거지?"*
+* *"에디터를 벗어나지 않고 확인할 수 없을까?"*
 
----
-
-## Demo
+## 데모
 
 ### Evidence Panel
-![Evidence Panel Demo](docs/images/demo.png)
+![Evidence Panel 데모](docs/images/demo.png)
+
+### Chat Panel
+![Chat Panel 데모](docs/images/chat-panel.png)
 
 ### Reference Library
 ![Reference Library](docs/images/reference-library.png)
 
----
+## 기능
 
-## Features
-
-| Feature                   | Description                       | Status |
+| 기능                      | 설명                                | 상태 |
 | ------------------------- | --------------------------------- | ------ |
 | **Evidence Search**       | 현재 문단 의미 기반 근거 자동 검색 (500ms 디바운스) | ✅      |
 | **Chat Panel**            | 참고문헌 기반 RAG 질의응답                  | ✅      |
 | **PDF Upload & Indexing** | PDF → SOLAR 파싱 → ChromaDB 인덱싱     | ✅      |
 | **Reference Library**     | `.bib` 기반 참고문헌 목록 관리              | ✅      |
 
----
+## 핵심 기능 흐름
 
-## How It Works (High-Level)
+### Evidence Panel
 
-1. 사용자가 LaTeX 문단을 작성합니다.
-2. 에디터가 현재 커서 위치의 문단을 감지합니다.
-3. 문단 의미를 기반으로 관련 참고문헌 구간을 검색합니다.
-4. Evidence Panel에서 근거를 즉시 확인하고 인용합니다.
-
-> 핵심은 **"검색하지 않아도, 쓰는 순간 근거가 보인다"**는 점입니다.
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Overleaf CE                          │
-│  ┌──────────────────┐    ┌────────────────────────────┐    │
-│  │   LaTeX Editor   │    │    Evidence Panel Module   │    │
-│  │  (CodeMirror 6)  │───▶│  - Evidence 자동 검색      │    │
-│  │                  │    │  - Chat (RAG Q&A)          │    │
-│  └──────────────────┘    │  - PDF 업로드/인덱싱       │    │
-│                          └────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    FastAPI Backend                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ /evidence    │  │ /documents   │  │ /chat        │      │
-│  │ /search      │  │ /upload      │  │ /ask         │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                 │               │
-│         ▼                 ▼                 ▼               │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                 Upstage SOLAR API                   │   │
-│  │  • Embeddings (4096-dim)                             │   │
-│  │  • Document Parse                                   │   │
-│  │  • Chat Completions (solar-pro)                     │   │
-│  └─────────────────────────────────────────────────────┘   │
-│         │                                                   │
-│         ▼                                                   │
-│  ┌──────────────┐                                          │
-│  │  ChromaDB    │  (persistent vector store)               │
-│  └──────────────┘                                          │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Core Feature Flows
-
-### Evidence Panel Flow
+문단 작성 → 자동 검색 → 클릭하여 인용
 
 "이 주장에 맞는 근거가 뭐였지?"를 **PDF 수동 탐색 없이** 해결합니다.
 문단을 쓰는 즉시 **관련 청크 + 페이지 정보**를 패널에서 미리보기로 제공합니다.
 
 ```mermaid
 sequenceDiagram
-    participant U as 사용자(Overleaf Editor)
-    participant CM as CodeMirror Extension
-    participant EC as EvidenceContext(UI State)
-    participant API as Backend /evidence/search
-    participant EMB as SOLAR Embeddings
-    participant VDB as Vector DB(ChromaDB)
+    participant 사용자 as 사용자 (에디터)
+    participant 확장 as CodeMirror 확장
+    participant 컨텍스트 as EvidenceContext
+    participant API as /evidence/search
+    participant Solar as SOLAR Embeddings
+    participant DB as ChromaDB
 
-    U->>CM: 커서 이동/문단 편집
-    CM->>CM: 현재 문단 추출
-    CM->>EC: paragraph-change 이벤트 발행
-    Note over EC: debounce(500ms) + 동일 문단 캐시 체크
+    사용자->>확장: 문단 작성/커서 이동
+    확장->>확장: 현재 문단 텍스트 추출
+    확장->>컨텍스트: paragraph-change 이벤트
 
-    EC->>API: POST { query: paragraph_text, project_id }
-    API->>EMB: query 임베딩 생성
-    EMB-->>API: query_vector
-    API->>VDB: similarity_search(top_k)
-    VDB-->>API: chunks[{text, doc_id, page, score, bib_key}]
-    API-->>EC: 결과 반환
-    EC-->>U: Evidence Panel에 스니펫/페이지 표시
+    Note over 컨텍스트: 500ms 디바운스 후 검색
 
-    U->>EC: 결과 클릭(Preview/Cite)
-    EC->>U: PDF 프리뷰 점프 또는 인용 삽입
+    컨텍스트->>API: POST {query: "현재 문단 텍스트"}
+    API->>Solar: 문단 텍스트 → 4096차원 벡터
+    Solar-->>API: 쿼리 벡터
+    API->>DB: 코사인 유사도 검색 (top 10)
+    DB-->>API: 유사한 청크들 + 페이지 정보
+    API-->>컨텍스트: 검색 결과
+    컨텍스트->>사용자: Evidence Panel에 결과 표시
 ```
 
-### Chat Panel Flow (RAG Q&A)
+### Chat Panel
+
+질문 입력 → 관련 근거 검색 → AI 답변 + 출처
 
 "이 참고문헌에서 방법론이 뭐였지?" 같은 질문을 **근거 기반으로 답변**합니다.
 답변에 **출처 (청크/페이지)**를 함께 제공하여 검증 가능하게 유지합니다.
 
 ```mermaid
 sequenceDiagram
-    participant U as 사용자(Chat Panel)
-    participant CC as ChatContext(UI State)
-    participant API as Backend /chat/ask
-    participant EMB as SOLAR Embeddings
-    participant VDB as Vector DB(ChromaDB)
-    participant LLM as SOLAR Chat(Completions)
+    participant 사용자
+    participant Chat as ChatContext
+    participant API as /chat/ask
+    participant Embed as SOLAR Embeddings
+    participant DB as ChromaDB
+    participant LLM as SOLAR Chat
 
-    U->>CC: 질문 입력/전송
-    CC->>CC: (선택) 현재 LaTeX 문서/선택 영역 수집
-    CC->>API: POST { question, document_context?, project_id }
+    사용자->>Chat: "Smith 2023의 주요 발견은 무엇인가요?"
+    Chat->>Chat: 현재 작성 중인 LaTeX 문서 수집
 
-    Note over API: Step 1) Retrieval
-    API->>EMB: question 임베딩
-    EMB-->>API: q_vector
-    API->>VDB: similarity_search(top_k)
-    VDB-->>API: evidence_chunks[{text, page, title, bib_key}]
+    Chat->>API: POST {question, document_context, project_id}
 
-    Note over API: Step 2) Prompt Assembly
-    API->>API: system + question + document_context + evidence_chunks 구성
+    Note over API: Step 1: 관련 근거 검색
+    API->>Embed: 질문 임베딩
+    Embed-->>API: 쿼리 벡터
+    API->>DB: 유사도 검색 (top 10)
+    DB-->>API: 관련 참고문헌 청크들
 
-    Note over API: Step 3) Generation
-    API->>LLM: chat completion 요청
-    LLM-->>API: answer
+    Note over API: Step 2: 프롬프트 구성
+    API->>API: 시스템 프롬프트 + 근거 + 질문 조합
 
-    API-->>CC: { answer, sources:[...] }
-    CC-->>U: 답변 + 출처 UI 렌더링
+    Note over API: Step 3: 답변 생성
+    API->>LLM: Chat Completions (solar-pro)
+    LLM-->>API: 생성된 답변
+
+    API-->>Chat: {answer, sources: [{text, title, page}]}
+    Chat->>사용자: 답변 + 출처 표시
+```
+
+### Reference Library
+
+PDF 업로드 → 자동 파싱 → 검색 가능
+
+"새 참고문헌 PDF 추가하면 바로 검색되게 하고 싶다" → 업로드 즉시 인덱싱됩니다.
+
+```mermaid
+sequenceDiagram
+    participant 사용자
+    participant UI as References Panel
+    participant API as /documents/upload
+    participant Parse as SOLAR Document Parse
+    participant Embed as SOLAR Embeddings
+    participant DB as ChromaDB
+
+    사용자->>UI: PDF 파일 드래그 & 드롭
+    UI->>API: POST multipart/form-data
+
+    Note over API: Step 1: PDF 파싱
+    API->>Parse: PDF 바이너리 전송
+    Parse-->>API: 텍스트 + 페이지별 위치 정보
+
+    Note over API: Step 2: 텍스트 청킹
+    API->>API: 500자 단위, 100자 오버랩
+
+    Note over API: Step 3: 임베딩 생성
+    loop 배치 처리 (5개씩)
+        API->>Embed: 청크 텍스트들
+        Embed-->>API: 4096차원 벡터들
+    end
+
+    Note over API: Step 4: 벡터 저장
+    API->>DB: 벡터 + 메타데이터 저장
+
+    API-->>UI: {status: "ready", chunk_count: N}
+    UI->>사용자: "인덱싱 완료" 표시
 ```
 
 ### Evidence Panel vs Chat Panel
@@ -210,20 +195,16 @@ sequenceDiagram
 
 두 패널은 같은 인덱스(참고문헌 PDF → 청킹 → 임베딩 → Vector DB)를 공유합니다.
 
----
+## 빠른 시작
 
-## Quick Start
-
-### Prerequisites
+### 사전 요구사항
 
 * Docker & Docker Compose
 * [Upstage API Key](https://console.upstage.ai/)
 
----
+### 데모 모드 (권장)
 
-### Demo Mode (Recommended)
-
-One command brings up Overleaf + RA API + seeded demo project (user created automatically).
+단일 명령어로 Overleaf + RA API + 데모 프로젝트를 실행합니다 (사용자 자동 생성).
 
 ```bash
 git clone --recursive https://github.com/GoBeromsu/my-awesome-ra.git
@@ -231,15 +212,15 @@ cd my-awesome-ra
 
 export UPSTAGE_API_KEY=<your_upstage_key>
 cd deployment
-docker compose --profile demo up -d   # add --build after code changes
-# wait ~1–2 min; optional: docker compose logs -f demo-init
+docker compose --profile demo up -d   # 코드 변경 후에는 --build 추가
+# 1-2분 대기; 선택사항: docker compose logs -f demo-init
 ```
 
-Access: [http://localhost](http://localhost)  
-Login: `demo@example.com` / `Demo@2024!Secure`  
-Demo project: **“Upstage ambassador demo”** (pre-loaded with LaTeX files; fixture images are skipped if history service is disabled—safe to ignore warnings).
+접속: [http://localhost](http://localhost)
+로그인: `demo@example.com` / `Demo@2024!Secure`
+데모 프로젝트: **"Upstage ambassador demo"** — 저자의 논문 [Detecting Multiple Semantic Concerns in Tangled Code Commits](https://arxiv.org/abs/2601.21298)를 사용합니다 (LaTeX 파일 사전 로드됨; history 서비스 비활성화 시 fixture 이미지 경고는 무시해도 됨).
 
-Reset to a fresh demo state (wipe data volumes):
+초기 상태로 리셋 (데이터 볼륨 삭제):
 
 ```bash
 cd deployment
@@ -248,76 +229,118 @@ docker volume rm deployment_overleaf-data deployment_api-data deployment_mongo-d
 docker compose --profile demo up -d
 ```
 
----
-
-### Development Mode
+### 개발 모드
 
 ```bash
-# Build CLSI (first time)
+# CLSI 빌드 (최초 1회)
 cd overleaf
 docker build -f develop/Dockerfile.clsi-dev -t develop-clsi .
 
-# Start dev services
+# 개발 서비스 시작
 cd develop
 docker compose up -d mongo redis web webpack clsi filestore docstore document-updater history-v1 real-time
 
-# Init MongoDB replica set
+# MongoDB 레플리카셋 초기화
 docker exec develop-mongo-1 mongosh --quiet --eval "rs.initiate()"
 
-# Setup demo
+# 데모 설정
 CONTAINER_NAME=develop-web-1 ./scripts/setup-demo.sh
 ```
----
 
-## API Endpoints
+## API 엔드포인트
 
-| Method   | Endpoint                 | Description              |
-| -------- | ------------------------ | ------------------------ |
-| `GET`    | `/health`                | Health check             |
-| `POST`   | `/evidence/search`       | Search evidence by query |
-| `POST`   | `/chat/ask`              | RAG Q&A                  |
-| `POST`   | `/documents/upload`      | Upload & index PDF       |
-| `GET`    | `/documents/{id}/status` | Indexing status          |
-| `DELETE` | `/documents/{id}`        | Remove document          |
+### 핵심 엔드포인트
 
----
+| 메서드   | 엔드포인트          | 설명                      |
+| -------- | ------------------ | ------------------------ |
+| `GET`    | `/health`          | 헬스 체크                  |
+| `POST`   | `/evidence/search` | 쿼리 기반 근거 검색          |
+| `POST`   | `/chat/ask`        | RAG 질의응답               |
 
-## Project Structure
+### 문서 관리
+
+| 메서드   | 엔드포인트                    | 설명                      |
+| -------- | ---------------------------- | ------------------------ |
+| `GET`    | `/documents`                 | 인덱싱된 문서 목록 조회      |
+| `POST`   | `/documents/upload`          | PDF 업로드 및 인덱싱        |
+| `GET`    | `/documents/{id}/status`     | 인덱싱 상태 조회            |
+| `GET`    | `/documents/{id}/chunks`     | 문서의 모든 청크 조회        |
+| `GET`    | `/documents/{id}/file`       | 원본 PDF 다운로드          |
+| `POST`   | `/documents/{id}/reindex`    | 문서 재파싱 및 재인덱싱      |
+| `DELETE` | `/documents/{id}`            | 문서 삭제                  |
+
+### 인용 추출
+
+| 메서드   | 엔드포인트             | 설명                      |
+| -------- | --------------------- | ------------------------ |
+| `POST`   | `/citations/extract`  | 텍스트에서 인용 정보 추출   |
+
+## 프로젝트 구조
 
 ```text
 my-awesome-ra/
-├── apps/api/              # FastAPI backend
-├── overleaf/              # Forked Overleaf CE
-│   └── evidence-panel/    # Evidence Panel module
+├── apps/api/              # FastAPI 백엔드
+├── overleaf/              # Overleaf CE 포크
+│   └── evidence-panel/    # Evidence Panel 모듈
 ├── deployment/            # Docker Compose
-├── fixtures/              # Demo data
-└── scripts/               # Setup & utilities
+├── fixtures/              # 데모 데이터
+└── scripts/               # 설정 및 유틸리티
 ```
 
----
+## 기술 스택
 
-## Tech Stack
-
-| Layer    | Technology                              |
+| 레이어    | 기술                                    |
 | -------- | --------------------------------------- |
 | AI       | Upstage SOLAR (Embeddings, Parse, Chat) |
-| Backend  | FastAPI, ChromaDB                       |
-| Frontend | React, TypeScript, CodeMirror 6         |
-| Editor   | Overleaf CE                             |
-| Infra    | Docker Compose                          |
+| 백엔드    | FastAPI, ChromaDB                       |
+| 프론트엔드 | React, TypeScript, CodeMirror 6         |
+| 에디터    | Overleaf CE                             |
+| 인프라    | Docker Compose                          |
 
----
+## 환경 설정
 
-## Configuration
+### 필수 설정
 
-| Variable          | Required | Description    |
-| ----------------- | :------: | -------------- |
-| `UPSTAGE_API_KEY` |     ✅    | SOLAR API key  |
-| `CHUNK_SIZE`      |          | Default: `500` |
-| `CHUNK_OVERLAP`   |          | Default: `100` |
+| 변수              | 필수 | 기본값                              | 설명                      |
+| ----------------- | :--: | ---------------------------------- | ------------------------ |
+| `UPSTAGE_API_KEY` |  ✅  | -                                  | SOLAR API 키              |
 
----
+### 선택 설정
 
-## License
+#### 벡터 저장소 & 청킹
 
-AGPL-3.0 (compatible with Overleaf CE)
+| 변수                 | 기본값           | 설명                           |
+| -------------------- | --------------- | ------------------------------ |
+| `VECTOR_STORE_PATH`  | `data/chroma`   | ChromaDB 벡터 저장 경로          |
+| `PDF_STORAGE_PATH`   | `data/pdfs`     | 업로드된 PDF 파일 저장 경로       |
+| `CHUNK_SIZE`         | `500`           | 텍스트 청킹 단위 (문자 수)        |
+| `CHUNK_OVERLAP`      | `100`           | 청크 간 오버랩 크기 (문자 수)      |
+
+#### 임베딩 & 검색
+
+| 변수                | 기본값                              | 설명                           |
+| ------------------- | ---------------------------------- | ------------------------------ |
+| `EMBEDDING_MODEL`   | `solar-embedding-1-large-query`    | 사용할 임베딩 모델               |
+| `INDEX_BATCH_SIZE`  | `10`                               | 임베딩 생성 배치 크기            |
+
+#### HNSW 벡터 인덱스 튜닝
+
+| 변수                     | 기본값      | 설명                                |
+| ------------------------ | ---------- | ----------------------------------- |
+| `HNSW_SPACE`             | `cosine`   | 거리 메트릭 (cosine, l2, ip)          |
+| `HNSW_M`                 | -          | 그래프 연결 수 (높을수록 정확도↑, 메모리↑) |
+| `HNSW_CONSTRUCTION_EF`   | -          | 인덱스 구축 시 탐색 범위               |
+| `HNSW_SEARCH_EF`         | -          | 검색 시 탐색 범위                     |
+| `HNSW_RESIZE_FACTOR`     | -          | 인덱스 크기 조정 배율                  |
+
+#### 데모 & 개발
+
+| 변수               | 기본값            | 설명                              |
+| ------------------ | ---------------- | --------------------------------- |
+| `SEED_INDEX_PATH`  | `fixtures/seed`  | 초기 시드 인덱스 경로               |
+| `RESET_TO_SEED`    | `false`          | 시작 시 시드 인덱스로 리셋 여부      |
+| `FRONTEND_URL`     | -                | CORS를 위한 프론트엔드 URL          |
+
+## 라이선스
+
+AGPL-3.0 (Overleaf CE와 호환)
