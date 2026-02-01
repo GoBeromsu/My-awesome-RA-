@@ -18,8 +18,9 @@ RUN pip install uv
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies (creates .venv in /app)
-RUN uv sync --no-dev
+# Install dependencies with cache (creates .venv in /app)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev
 
 # Runtime stage
 FROM python:3.11-slim
