@@ -71,6 +71,7 @@ async def list_documents(
                 page_count=doc.get("page_count"),
                 chunk_count=doc["chunk_count"],
                 indexed_at=doc.get("indexed_at"),
+                has_pdf=doc.get("has_pdf", False),
             )
             for doc in documents
         ],

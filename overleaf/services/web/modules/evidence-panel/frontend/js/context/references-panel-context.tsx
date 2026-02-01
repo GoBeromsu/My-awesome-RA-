@@ -114,7 +114,8 @@ function createPaperFromBibEntry(
     title: entry.title,
     authors: entry.authors,
     year: entry.year,
-    hasPdf: entry.hasPdf,
+    // Use API's hasPdf (document is indexed), fallback to false if not indexed
+    hasPdf: indexedDoc?.hasPdf ?? false,
     pdfFileId: entry.pdfFileId,
     pdfFilename: entry.pdfFilename,
     indexStatus: mapDocumentStatusToIndexStatus(indexedDoc?.status),

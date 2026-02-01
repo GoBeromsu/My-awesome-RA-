@@ -19,6 +19,7 @@ export interface IndexedDocument {
   chunkCount?: number
   pageCount?: number
   message?: string
+  hasPdf: boolean
 }
 
 interface IndexedDocumentResponse {
@@ -30,6 +31,7 @@ interface IndexedDocumentResponse {
   page_count: number | null
   chunk_count: number
   indexed_at: string | null
+  has_pdf?: boolean
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -91,6 +93,7 @@ export function useDocumentsApi(): UseDocumentsApiResult {
           status: 'indexed' as const,
           chunkCount: doc.chunk_count,
           pageCount: doc.page_count ?? undefined,
+          hasPdf: doc.has_pdf ?? doc.chunk_count > 0,
         })
       )
 
@@ -182,6 +185,7 @@ export function useDocumentsApi(): UseDocumentsApiResult {
           title: file.name.replace(/\.pdf$/i, ''),
           status: data.status === 'indexed' ? 'indexed' : 'processing',
           message: data.message,
+          hasPdf: true,  // Uploaded documents have PDFs
         }
 
         setDocuments(prev => {

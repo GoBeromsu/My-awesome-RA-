@@ -442,6 +442,44 @@ class IndexService:
 
         return chunks
 
+    def _parse_cite_key_metadata(self, cite_key: str | None) -> dict[str, Any]:
+        """
+        Parse metadata from cite_key pattern: Author2024Title.
+
+        Args:
+            cite_key: Citation key string (e.g., "Vaswani2017Attention").
+
+        Returns:
+            Dict with parsed authors, year, and title (may be empty).
+        """
+        import re
+
+        if not cite_key:
+            return {}
+
+        # Pattern: Author(s)Year(4 digits)Title
+        # Examples: Vaswani2017Attention, BrownMann2020Language
+        match = re.match(r"^([A-Za-z\-]+)(\d{4})(.+)$", cite_key)
+        if match:
+            authors_part = match.group(1)
+            year_str = match.group(2)
+            title_part = match.group(3)
+
+            # Convert CamelCase to readable: "BrownMann" -> "Brown, Mann"
+            # Split on uppercase letters
+            authors = re.sub(r"([a-z])([A-Z])", r"\1, \2", authors_part)
+
+            # Convert CamelCase title to readable: "Attention" -> "Attention"
+            # Add spaces before capitals: "LanguageModels" -> "Language Models"
+            title = re.sub(r"([a-z])([A-Z])", r"\1 \2", title_part)
+
+            return {
+                "authors": authors,
+                "year": int(year_str),
+                "title": title,
+            }
+        return {}
+
     def list_documents(self) -> list[dict[str, Any]]:
         """
         List all indexed documents with their metadata.
@@ -464,15 +502,21 @@ class IndexService:
                     continue
 
                 if doc_id not in documents:
+                    cite_key = meta.get("cite_key")
+
+                    # Fallback: parse metadata from cite_key if not stored
+                    parsed = self._parse_cite_key_metadata(cite_key)
+
                     documents[doc_id] = {
                         "document_id": doc_id,
-                        "cite_key": meta.get("cite_key"),
-                        "title": meta.get("title"),
-                        "authors": meta.get("authors"),
-                        "year": meta.get("year"),
+                        "cite_key": cite_key,
+                        "title": meta.get("title") or parsed.get("title"),
+                        "authors": meta.get("authors") or parsed.get("authors"),
+                        "year": meta.get("year") or parsed.get("year"),
                         "page_count": meta.get("page_count") or meta.get("pages"),
                         "chunk_count": 0,
                         "indexed_at": meta.get("indexed_at"),
+                        "has_pdf": True,  # Documents in ChromaDB came from indexed PDFs
                     }
                 documents[doc_id]["chunk_count"] += 1
 

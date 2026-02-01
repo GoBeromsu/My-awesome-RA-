@@ -61,6 +61,7 @@ class DocumentInfo(BaseModel):
     page_count: int | None = Field(default=None, ge=1, description="Number of pages")
     chunk_count: int = Field(..., ge=0, description="Number of chunks")
     indexed_at: str | None = Field(default=None, description="Indexing timestamp")
+    has_pdf: bool = Field(default=False, description="Whether document has indexed PDF")
 
 
 class DocumentListResponse(BaseModel):
