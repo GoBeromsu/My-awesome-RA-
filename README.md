@@ -249,11 +249,10 @@ CONTAINER_NAME=develop-web-1 ./scripts/setup-demo.sh
 
 ## API 엔드포인트
 
-### 핵심 엔드포인트
+### 핵심
 
 | 메서드   | 엔드포인트          | 설명                      |
 | -------- | ------------------ | ------------------------ |
-| `GET`    | `/health`          | 헬스 체크                  |
 | `POST`   | `/evidence/search` | 쿼리 기반 근거 검색          |
 | `POST`   | `/chat/ask`        | RAG 질의응답               |
 
@@ -264,16 +263,9 @@ CONTAINER_NAME=develop-web-1 ./scripts/setup-demo.sh
 | `GET`    | `/documents`                 | 인덱싱된 문서 목록 조회      |
 | `POST`   | `/documents/upload`          | PDF 업로드 및 인덱싱        |
 | `GET`    | `/documents/{id}/status`     | 인덱싱 상태 조회            |
-| `GET`    | `/documents/{id}/chunks`     | 문서의 모든 청크 조회        |
 | `GET`    | `/documents/{id}/file`       | 원본 PDF 다운로드          |
 | `POST`   | `/documents/{id}/reindex`    | 문서 재파싱 및 재인덱싱      |
 | `DELETE` | `/documents/{id}`            | 문서 삭제                  |
-
-### 인용 추출
-
-| 메서드   | 엔드포인트             | 설명                      |
-| -------- | --------------------- | ------------------------ |
-| `POST`   | `/citations/extract`  | 텍스트에서 인용 정보 추출   |
 
 ## 프로젝트 구조
 
@@ -281,7 +273,6 @@ CONTAINER_NAME=develop-web-1 ./scripts/setup-demo.sh
 my-awesome-ra/
 ├── apps/api/              # FastAPI 백엔드
 ├── overleaf/              # Overleaf CE 포크
-│   └── evidence-panel/    # Evidence Panel 모듈
 ├── deployment/            # Docker Compose
 ├── fixtures/              # 데모 데이터
 └── scripts/               # 설정 및 유틸리티
@@ -305,33 +296,6 @@ my-awesome-ra/
 | ----------------- | :--: | ---------------------------------- | ------------------------ |
 | `UPSTAGE_API_KEY` |  ✅  | -                                  | SOLAR API 키              |
 
-### 선택 설정
-
-#### 벡터 저장소 & 청킹
-
-| 변수                 | 기본값           | 설명                           |
-| -------------------- | --------------- | ------------------------------ |
-| `VECTOR_STORE_PATH`  | `data/chroma`   | ChromaDB 벡터 저장 경로          |
-| `PDF_STORAGE_PATH`   | `data/pdfs`     | 업로드된 PDF 파일 저장 경로       |
-| `CHUNK_SIZE`         | `500`           | 텍스트 청킹 단위 (문자 수)        |
-| `CHUNK_OVERLAP`      | `100`           | 청크 간 오버랩 크기 (문자 수)      |
-
-#### 임베딩 & 검색
-
-| 변수                | 기본값                              | 설명                           |
-| ------------------- | ---------------------------------- | ------------------------------ |
-| `EMBEDDING_MODEL`   | `solar-embedding-1-large-query`    | 사용할 임베딩 모델               |
-| `INDEX_BATCH_SIZE`  | `10`                               | 임베딩 생성 배치 크기            |
-
-#### HNSW 벡터 인덱스 튜닝
-
-| 변수                     | 기본값      | 설명                                |
-| ------------------------ | ---------- | ----------------------------------- |
-| `HNSW_SPACE`             | `cosine`   | 거리 메트릭 (cosine, l2, ip)          |
-| `HNSW_M`                 | -          | 그래프 연결 수 (높을수록 정확도↑, 메모리↑) |
-| `HNSW_CONSTRUCTION_EF`   | -          | 인덱스 구축 시 탐색 범위               |
-| `HNSW_SEARCH_EF`         | -          | 검색 시 탐색 범위                     |
-| `HNSW_RESIZE_FACTOR`     | -          | 인덱스 크기 조정 배율                  |
 
 #### 데모 & 개발
 
